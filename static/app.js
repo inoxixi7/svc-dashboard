@@ -148,7 +148,7 @@ function row(e, mobile) {
   const res = fmtRes(e);
   const rres = e.res ? { cpu: Math.round(e.res.cpu), mem_mb: Math.round(e.res.mem_mb),
                          up_sec: Math.floor(e.res.up_sec / 60) * 60 } : null;
-  const dpayload = { name: serviceName, port: e.port, ip, cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
+  const dpayload = { name: serviceName, port: e.port, ip, ips: e.listen_ips || [ip], cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
   const detailBtn = BOOT.readonly ? "" : `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(dpayload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
   const actions = `${detailBtn}${ctl}${svBtnNamed}`;
   if (mobile) {
@@ -168,25 +168,61 @@ function row(e, mobile) {
 }
 
 // --- 服务表增量渲染: 轮询(桌面10s/移动30s)不再整表 innerHTML 重建 ---
-// key=ip:port(一个监听一行), sig=整行 HTML: 内容没变的行 <tr> 节点原地保留,
+// key=语义服务+端口(IPv4/IPv6 等同端口监听先合并), sig=整行 HTML: 内容没变的行 <tr> 节点原地保留,
 // 悬停/按钮态/长按上下文不闪; 变化的行单独 replaceWith; 顺序按数据序插入。
 const svcRows = new Map();   // key -> {html, node}
 
 function svcGroup(e) {
   const appId = e.app_id || "";
-  if (appId === "ssh" || appId === "samba") return "network";
+  if (appId === "ssh" || appId === "samba" || appId === "tailscale") return "network";
   if (appId) return "apps";
   if (e.type === "docker" || e.scope === "docker") return "docker";
   if (e.scope === "system") return "system";
   return "apps";
 }
 
+function collapseSvcListeners(list) {
+  const merged = new Map();
+  const keyFor = (e) => {
+    if (e.app_id) return `app:${e.app_id}:${e.port}`;
+    if (e.type === "docker") return `docker:${e.container_id || e.name || "?"}:${e.port}`;
+    if (e.type === "systemd") return `systemd:${e.unit || e.name || "?"}:${e.port}`;
+    return `direct:${e.name || "?"}:${e.port}`;
+  };
+
+  for (const e of (list || [])) {
+    const key = keyFor(e);
+    const ip = e.ip || "";
+    const old = merged.get(key);
+    if (!old) {
+      const first = { ...e };
+      first.listen_ips = ip ? [ip] : [];
+      first.pids = [...new Set(e.pids || [])];
+      merged.set(key, first);
+      continue;
+    }
+    if (ip && !old.listen_ips.includes(ip)) old.listen_ips.push(ip);
+    old.pids = [...new Set([...(old.pids || []), ...(e.pids || [])])];
+    old.is_self = !!(old.is_self || e.is_self);
+    old.paused = !!(old.paused || e.paused);
+    old.svcctl_paused = !!(old.svcctl_paused || e.svcctl_paused);
+    old.app_entry = !!(old.app_entry || e.app_entry);
+    if (!old.cmdline && e.cmdline) old.cmdline = e.cmdline;
+    if (!old.cwd && e.cwd) old.cwd = e.cwd;
+    if (!old.unit && e.unit) old.unit = e.unit;
+    if (!old.container_id && e.container_id) old.container_id = e.container_id;
+    if (!old.res && e.res) old.res = e.res;
+  }
+  return [...merged.values()];
+}
+
 function renderSvcRows(tbody, shown, mobile) {
-  if (!shown.length) {
+  const collapsed = collapseSvcListeners(shown);
+  if (!collapsed.length) {
     if (!tbody.querySelector("td.empty"))
       tbody.innerHTML = '<tr><td class="empty" colspan="4">' + t("no_match") + '</td></tr>';
     svcRows.clear();
-    return;
+    return 0;
   }
 
   const groupDefs = [
@@ -196,7 +232,7 @@ function renderSvcRows(tbody, shown, mobile) {
     ["system", t("svc_group_system")],
   ];
   const buckets = new Map(groupDefs.map(([id]) => [id, []]));
-  shown.forEach(e => buckets.get(svcGroup(e)).push(e));
+  collapsed.forEach(e => buckets.get(svcGroup(e)).push(e));
   for (const arr of buckets.values()) {
     arr.sort((a, b) => (b.app_priority || 0) - (a.app_priority || 0) || a.port - b.port);
   }
@@ -210,7 +246,8 @@ function renderSvcRows(tbody, shown, mobile) {
       html: `<tr class="svc-group-row"><td colspan="4"><span class="svc-group-title">${escHtml(label)}</span><span class="svc-group-count">${arr.length}</span></td></tr>`
     });
     arr.forEach((e, i) => {
-      let key = "svc:" + (e.ip || "?") + ":" + e.port;
+      const ident = e.app_id || e.container_id || e.unit || e.name || "?";
+      let key = "svc:" + ident + ":" + e.port;
       if (seq.some(x => x.key === key)) key += "#" + i;
       seq.push({ key, html: row(e, mobile) });
     });
@@ -235,6 +272,7 @@ function renderSvcRows(tbody, shown, mobile) {
   });
   for (const [k, ent] of svcRows)
     if (!want.has(k)) { ent.node.remove(); svcRows.delete(k); }
+  return collapsed.length;
 }
 function hideAllServiceSubviews() {
   const np = $("network-page"); if (np) np.hidden = true;
@@ -306,8 +344,8 @@ function applyFilter() {
   const cp = $("cron-panel"); if (cp) { cp.style.display = ""; cp.hidden = false; }
   const lp = $("logpage"); if (lp) { lp.style.display = ""; lp.hidden = false; }
   const tbody = $("svc")?.querySelector("tbody");
-  if (tbody) renderSvcRows(tbody, shown, isMobile());
-  $("count").textContent = shown.length;
+  const visibleCount = tbody ? renderSvcRows(tbody, shown, isMobile()) : collapseSvcListeners(shown).length;
+  $("count").textContent = visibleCount;
   fillCtl(); // 服务表行尾 暂停/继续 按钮状态
   fillSvcDots(); // 行首状态点
   if (typeof fetchTailscaleData === "function") {
@@ -4874,7 +4912,7 @@ document.addEventListener("click", async (e) => {
     + (d.cid ? `<span class="k">${t("detail_cid")}</span><span class="v">${esc(d.cid)}</span>` : "");
   msg.innerHTML = `<div class="svc-detail-kv">`
     + `<span class="k">${t("th_port")}</span><span class="v">${esc(d.port || "—")}</span>`
-    + `<span class="k">${t("th_addr")}</span><span class="v">${esc(d.ip || "—")}</span>`
+    + `<span class="k">${t("th_addr")}</span><span class="v">${esc(((d.ips && d.ips.length) ? d.ips : [d.ip]).filter(Boolean).join(", ") || "—")}</span>`
     + `<span class="k">PID</span><span class="v">${esc((d.pids || []).join(", ") || "—")}</span>`
     + resRows
     + `<span class="k">${t("th_cmd")}</span><span class="v">${esc(d.cmd || "—")}</span>`
