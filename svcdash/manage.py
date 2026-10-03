@@ -7,30 +7,13 @@ from svcdash.procscan import _kill_tree, listen_sockets, inode_to_pid
 #                 需要 root,走与 _run_sudo_ss 相同的免密 sudo 通道执行 systemctl。
 # kind="proc":    手动拉起的非 systemd 进程(wilviewer/mapviewer 等),无 unit 文件。
 #                 状态按端口检测;「暂停」= 终止进程(释放端口),「启用」= 重新 detach 拉起。
-#                 dashboard 自身(监听 DEFAULT_PORT=80)绝不纳入,且 _proc_stop 有端口守卫。
+#                 dashboard 自身(监听 DEFAULT_PORT)绝不纳入,且 _proc_stop 有端口守卫。
 
 # label/desc 存 i18n 键（m_*），显示时按语言取；避免后端硬编码中文泄漏到 en/ja。
-MANAGE_UNITS = [
-    {"id": "zircon-server", "kind": "systemd", "unit": "zircon-server.service",
-     "label": "m_server", "desc": "m_server_desc"},
-    {"id": "zircon-bots", "kind": "systemd", "unit": "zircon-bots.service",
-     "label": "m_bots", "desc": "m_bots_desc"},
-    {"id": "wsgateway", "kind": "systemd", "unit": "wsgateway.service",
-     "label": "mgr_zircon_ws", "desc": "mgr_zircon_ws_desc"},
-    {"id": "wilviewer", "kind": "proc", "port": 8765,
-     "label": "m_wilviewer", "desc": "m_wilviewer_desc",
-     "user": "tetsuya",
-     "cwd": "/home/tetsuya/development/Mir3-Research",
-     "cmd": ["/home/tetsuya/mir3-venv/bin/python", "Tools/web/wilviewer.py",
-             "--root", "/tmp/nas_mnt/NAS/TMP/EI传奇3.0客户端", "--port", "8765"]},
-    {"id": "mapviewer", "kind": "proc", "port": 8899,
-     "label": "m_mapviewer", "desc": "m_mapviewer_desc",
-     "user": "tetsuya",
-     "cwd": "/home/tetsuya/development/Mir3-Research",
-     "cmd": ["/home/tetsuya/mir3-venv/bin/python", "Tools/maps/mapviewer.py",
-             "/tmp/nas_mnt/NAS/TMP/EI传奇3.0客户端/Map",
-             "--data", "/tmp/nas_mnt/NAS/TMP/EI传奇3.0客户端/Data", "--port", "8899"]},
-]
+# Upstream ships host-specific Zircon/Mir3 service definitions.
+# This fork starts with no privileged managed-service allowlist. Add only services
+# that are intentionally managed on the target host.
+MANAGE_UNITS = []
 
 
 def unit_label(cfg, lang=DEFAULT_LANG):
