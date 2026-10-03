@@ -1,9 +1,10 @@
 import glob, json, os, re, subprocess, time
 from datetime import datetime
 from svcdash.i18n import t, DEFAULT_LANG
+from svcdash.runtime_env import HOME, USER as RUN_USER, user_command
 # ---------------- OMP Goal 状态 ----------------
 # 只读扫描 OMP 的 session JSONL 与 tmux pane，不执行任何控制命令。
-OMP_SESSION_ROOT = "/home/tetsuya/.omp/agent/sessions"
+OMP_SESSION_ROOT = os.path.join(HOME, ".omp/agent/sessions")
 _omp_cache = {"t": 0.0, "data": None}
 
 def _omp_tail(path, limit=512 * 1024):
@@ -24,7 +25,7 @@ def _omp_tmux_panes():
         cmd = ["tmux", "list-panes", "-a", "-F", fmt]
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=2).stdout
         if not out.strip() and os.geteuid() == 0:
-            out = subprocess.run(["sudo", "-u", "tetsuya"] + cmd,
+            out = subprocess.run(user_command(cmd),
                                  capture_output=True, text=True, timeout=2).stdout
         for line in out.splitlines():
             p = line.split("|", 4)
@@ -108,8 +109,8 @@ def scan_omp():
 
 # ---------------- Codex Agent 状态 ----------------
 # 进程 + shell_snapshot 会话标识,只读。
-CODEX_SNAPSHOT_DIR = "/home/tetsuya/.codex/shell_snapshots"
-CODEX_SESSION_ROOT = "/home/tetsuya/.codex/sessions"
+CODEX_SNAPSHOT_DIR = os.path.join(HOME, ".codex/shell_snapshots")
+CODEX_SESSION_ROOT = os.path.join(HOME, ".codex/sessions")
 _codex_cache = {"t": 0.0, "data": None}
 
 
@@ -179,7 +180,7 @@ def scan_codex():
     # session_index 是轻量索引，rollout JSONL 提供精确的最近事件。
     index = {}
     try:
-        with open("/home/tetsuya/.codex/session_index.jsonl", encoding="utf-8") as f:
+        with open(os.path.join(HOME, ".codex/session_index.jsonl"), encoding="utf-8") as f:
             for raw in f:
                 try:
                     row = json.loads(raw)
@@ -232,7 +233,7 @@ _tmux_full_cache = {"t": 0.0, "data": None}
 
 
 def _tmux_run(args, timeout=2):
-    """以当前用户跑 tmux 子命令;root 时降级 sudo -u tetsuya(输出为空才降级)。"""
+    """以当前用户跑 tmux 子命令；root 部署时降权到数据所有者。"""
     cmd = ["tmux"] + args
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
@@ -240,7 +241,7 @@ def _tmux_run(args, timeout=2):
         return ""
     if not out.strip() and os.geteuid() == 0:
         try:
-            out = subprocess.run(["sudo", "-n", "-u", "tetsuya"] + cmd,
+            out = subprocess.run(user_command(cmd),
                                  capture_output=True, text=True, timeout=timeout).stdout
         except (OSError, subprocess.SubprocessError):
             return ""
@@ -310,7 +311,7 @@ def scan_tmux_full():
                     "workdir": g.get("workdir") or "",
                     "status": st or "active",
                     "objective": obj or "",
-                    "resume_cmd": f"/home/tetsuya/.bun/bin/omp --resume {gid} --auto-approve"
+                    "resume_cmd": f"{os.path.join(HOME, '.bun/bin/omp')} --resume {gid} --auto-approve"
                 }
     except Exception:
         pass
@@ -592,9 +593,9 @@ def capture_tmux_pane(target, lines=300, ansi=True):
 
     raw = _tmux_run(cmd, timeout=3)
     if not raw and os.geteuid() == 0:
-        # 降级尝试 sudo -u tetsuya
+        # root 部署时降权到数据所有者
         try:
-            full_cmd = ["sudo", "-n", "-u", "tetsuya", "tmux"] + cmd
+            full_cmd = user_command(["tmux"] + cmd)
             raw = subprocess.run(full_cmd, capture_output=True, text=True, timeout=3).stdout
         except (OSError, subprocess.SubprocessError):
             raw = ""
@@ -652,14 +653,14 @@ def tmux_wake_session(session_name: str, pane: str = "", lang=DEFAULT_LANG) -> t
             wd = watchdog_goals()
             g_info = wd.get(session_name)
             if g_info and g_info.get("gid"):
-                resume_cmd = f"/home/tetsuya/.bun/bin/omp --resume {g_info['gid']} --auto-approve"
+                resume_cmd = f"{os.path.join(HOME, '.bun/bin/omp')} --resume {g_info['gid']} --auto-approve"
                 _tmux_run(["send-keys", "-t", target, resume_cmd, "Enter"])
                 return True, t(lang, "mm_wake_resume")
         except Exception:
             pass
 
     # 4. 调用 Hermes 进行智能诊断与操作注入
-    hermes_bin = "/home/tetsuya/.local/bin/hermes"
+    hermes_bin = os.path.join(HOME, ".local/bin/hermes")
     if os.path.exists(hermes_bin):
         prompt = (
             f"目标 tmux 会话 '{target}' 当前疑似卡住、中断或正在等待人类确认/选择。\n"
@@ -672,8 +673,8 @@ def tmux_wake_session(session_name: str, pane: str = "", lang=DEFAULT_LANG) -> t
             f"最后只输出一行中文简报，说明你执行了什么操作。"
         )
         try:
-            # 以 tetsuya 用户运行 hermes
-            cmd = ["sudo", "-n", "-u", "tetsuya", hermes_bin, "-z", prompt]
+            # 以 dashboard 数据所有者运行 hermes
+            cmd = user_command([hermes_bin, "-z", prompt])
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
             out_lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
             summary_msg = out_lines[-1] if out_lines else (proc.stderr.strip()[:100] or t(lang, "mm_wake_hermes", msg="—"))
