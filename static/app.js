@@ -1451,13 +1451,16 @@ function renderPortalSvc(services) {
     const ip = e.ip || "";
     const loop = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
     const normalWeb = e.scope !== "system" && !loop && ![22000, 5355].includes(+e.port);
-    return !e.paused && (e.app_id || normalWeb);
+    // Known g3 apps only appear on the overview when this listener is their
+    // canonical UI entry point. Raw listeners remain visible on the Services page.
+    if (e.app_id) return !e.paused && e.app_entry === true;
+    return !e.paused && normalWeb;
   });
   const seen = new Set(), uniq = [];
   candidates
     .sort((a, b) => (b.app_priority || 0) - (a.app_priority || 0) || a.port - b.port)
     .forEach(e => {
-      const k = (e.app_id || e.name || "?") + ":" + e.port;
+      const k = e.app_id || ((e.name || "?") + ":" + e.port);
       if (!seen.has(k)) { seen.add(k); uniq.push(e); }
     });
   const activeCount = svcs.filter(s => !s.paused).length;
@@ -1471,7 +1474,8 @@ function renderPortalSvc(services) {
     const id = svcIdentity(e);
     const link = serviceLink(e);
     const r = e.res;
-    const detail = e.app_category || id.sub || "active";
+    const detail = [e.app_category, e.app_role && e.app_role !== "web" ? e.app_role : ""]
+      .filter(Boolean).join(" · ") || id.sub || "active";
     const resTxt = r
       ? `${detail} · ${r.cpu.toFixed(0)}% · ${Math.round(r.mem_mb)}M`
       : detail;
