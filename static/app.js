@@ -477,7 +477,7 @@ if (rpRefreshBtn) rpRefreshBtn.addEventListener("click", () => {
 });
 
 // 快捷工具入口 chips: 端口存活才显示,点击直达(随 /api 刷新)
-const TOOL_LINKS = [["dbeditor", 8810], ["dbviewer", 8800], ["wilviewer", 8765], ["mapviewer", 8899]];
+const TOOL_LINKS = [];
 function renderToolchips() {
   const el = $("toolchips");
   if (!el) return;
@@ -849,16 +849,8 @@ function renderWatchdogPanel(tasks) {
 }
 
 // ---------------------------------------------------------------- 服务管理
-// 管理本机关键 systemd 单元(zircon-server / zircon-bots / tailscaled)与
-// 手动进程服务(wilviewer / mapviewer): 启动 / 停止 / 重启 / 暂停 / 恢复。
-const MANAGE_UNITS = [
-  { id: "zircon-server", kind: "systemd", label: t("m_server"), desc: t("m_server_desc") },
-  { id: "zircon-bots", kind: "systemd", label: t("m_bots"), desc: t("m_bots_desc") },
-  { id: "wsgateway", kind: "systemd", label: t("mgr_zircon_ws"), desc: t("mgr_zircon_ws_desc") },
-  { id: "tailscaled", kind: "systemd", label: t("m_ts"), desc: t("m_ts_desc") },
-  { id: "wilviewer", kind: "proc", port: 8765, label: t("m_wilviewer"), desc: t("m_wilviewer_desc") },
-  { id: "mapviewer", kind: "proc", port: 8899, label: t("m_mapviewer"), desc: t("m_mapviewer_desc") },
-];
+// 主机专用管理单元默认留空；后续仅加入 g3 实际需要管理的服务。
+const MANAGE_UNITS = [];
 const MANAGE_LABELS = { start: t("m_start"), stop: t("m_stop"), restart: t("m_restart"), pause: t("m_pause"), resume: t("m_resume") };
 
 async function loadManage() {
@@ -1832,8 +1824,8 @@ function formatBroadDate(ts) {
 const GITHUB_NODE_SVG = `<svg class="act-node-svg" width="24" height="18" viewBox="0 0 24 18" fill="none" aria-hidden="true"><path d="M0 9h7M17 9h7" stroke="var(--border-subtle, rgba(128,128,128,.45))" stroke-width="2"/><circle cx="12" cy="9" r="4.5" fill="var(--bg, #0a0a0a)" stroke="var(--border-subtle, rgba(128,128,128,.7))" stroke-width="2"/><circle cx="12" cy="9" r="1.8" fill="currentColor"/></svg>`;
 
 const CURATED_PALETTE = [
-  "#a371f7", // 紫色 (Mir3-Research)
-  "#388bfd", // 蓝色 (zircon)
+  "#a371f7", // 紫色
+  "#388bfd", // 蓝色
   "#3fb950", // 绿色 (svc-dashboard)
   "#f0883e", // 暖橙
   "#22d3ee", // 青蓝
@@ -1869,8 +1861,6 @@ function getRepoColorMap() {
   } catch (e) {
     repoColorMap = {};
   }
-  if (!repoColorMap["Mir3-Research"]) repoColorMap["Mir3-Research"] = "#a371f7";
-  if (!repoColorMap["zircon"]) repoColorMap["zircon"] = "#388bfd";
   if (!repoColorMap["svc-dashboard"]) repoColorMap["svc-dashboard"] = "#3fb950";
   return repoColorMap;
 }
@@ -2089,7 +2079,7 @@ async function renderActivityPage() {
       if (e.url) {
         ghBtn = `<a class="btn-act btn-act-gh" href="${escAttr(e.url)}" target="_blank" rel="noopener">${icon("git", 13)} ${escHtml(t("act_diff_gh"))} ↗</a>`;
       } else if (sha) {
-        ghBtn = `<a class="btn-act btn-act-gh" href="https://github.com/iamcheyan/${encodeURIComponent(repo)}/commit/${encodeURIComponent(sha)}" target="_blank" rel="noopener">${icon("git", 13)} ${escHtml(t("act_diff_gh"))} ↗</a>`;
+        ghBtn = `<a class="btn-act btn-act-gh" href="https://github.com/${encodeURIComponent(BOOT.githubUser || "inoxixi7")}/${encodeURIComponent(repo)}/commit/${encodeURIComponent(sha)}" target="_blank" rel="noopener">${icon("git", 13)} ${escHtml(t("act_diff_gh"))} ↗</a>`;
       }
 
       let diffBtn = "";
@@ -2099,8 +2089,8 @@ async function renderActivityPage() {
 
       const subj = e.subject || e.text || "—";
       const timeStr = e.time || (e.ts ? new Date(e.ts * 1000).toLocaleString(LOCALE_TAG) : '');
-      const author = e.author || "cheyan";
-      const initial = (author.slice(0, 1) || "C").toUpperCase();
+      const author = e.author || "git";
+      const initial = (author.slice(0, 1) || "G").toUpperCase();
       const metaRow = `<div class="act-meta-row">
         <span class="act-author-wrap"><span class="act-avatar-badge">${escHtml(initial)}</span> <span class="act-author">${escHtml(author)}</span></span>
         <span class="act-dot-sep">·</span>
