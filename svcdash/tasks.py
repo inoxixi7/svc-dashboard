@@ -1,12 +1,13 @@
 import glob, os, re, subprocess, time
 from datetime import datetime
 from svcdash.i18n import t, DEFAULT_LANG
+from svcdash.runtime_env import USER as RUN_USER
 # ---------------- 定时任务 / 看门狗扫描 ----------------
 # 不硬编码任何任务:自动枚举 cron(用户/root/系统/cron.d)与 systemd timers
 # (系统 + 用户),按名称启发式打类型标签。
 
 CRON_FILES = [
-    ("user", "/var/spool/cron/crontabs/tetsuya"),
+    ("user", f"/var/spool/cron/crontabs/{RUN_USER}"),
     ("root", "/var/spool/cron/crontabs/root"),
     ("system", "/etc/crontab"),
 ]
@@ -127,8 +128,11 @@ def _run_timers(scope, lang=DEFAULT_LANG):
     env = None
     cmd = ["systemctl"]
     if scope == "user":
-        # 通过 machinectl 访问 tetsuya 的 user manager(root 直接连不上 user bus)
-        cmd += ["--machine=tetsuya@.host", "--user"]
+        # root 服务通过 machinectl 访问数据所有者的 user manager；普通用户直接 --user。
+        if os.geteuid() == 0 and RUN_USER != "root":
+            cmd += [f"--machine={RUN_USER}@.host", "--user"]
+        else:
+            cmd += ["--user"]
     try:
         r = subprocess.run(cmd + ["list-unit-files", "--type=timer", "--no-pager", "--plain"],
                            capture_output=True, text=True, timeout=5, env=env)
