@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_PORT = 8080
+DEFAULT_PORT = 8180
 AUTO_REFRESH_SEC = 10
 # Security-first default: only expose the dashboard on the local machine.
 # Use --host explicitly if remote interface binding is intentionally required.
