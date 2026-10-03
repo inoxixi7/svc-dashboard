@@ -363,6 +363,7 @@ def _render_shell_core(host_header, entries, updated_ts, lang, sysdata):
 def render_html(host_header, entries, updated_ts, lang=DEFAULT_LANG, sysdata=None, ts_mode=False, token=""):
     body = _render_shell_core(host_header, entries, updated_ts, lang, sysdata)
     boot = {"auto": AUTO_REFRESH_SEC, "lang": lang, "tsMode": bool(ts_mode),
+            "githubUser": os.environ.get("SVC_GITHUB_USER") or "inoxixi7",
             "t": L10N.get(lang, L10N[DEFAULT_LANG]),
             "icons": ICONS,
             "tl": tools_conf(),
