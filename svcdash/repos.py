@@ -13,7 +13,7 @@ _repo_stats_cache = {"t": 0.0, "data": None}
 
 
 def _git(repo, args, timeout=6):
-    """只读跑 git;服务以 root 跑、仓库属主是 tetsuya,用 safe.directory=*
+    """只读跑 git;兼容服务用户与仓库属主不同的情况,用 safe.directory=*
     跳过 dubious-ownership;--no-optional-locks 防止 status 刷新别人的索引。"""
     cmd = ["git", "-c", "safe.directory=*", "-c", "core.quotepath=off",
            "--no-optional-locks", "-C", repo] + args
