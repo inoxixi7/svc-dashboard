@@ -310,6 +310,16 @@ def selftest():
             self.assertEqual(openlist["display_name"], "OpenList")
             self.assertFalse(openlist["app_entry"])
             self.assertTrue(openlist["app_internal"])
+            ssh = service_profile({"name": "?", "port": 22})
+            self.assertEqual(ssh["display_name"], "SSH")
+            self.assertEqual(ssh["app_category"], "Remote Access")
+            self.assertFalse(ssh["app_entry"])
+            samba139 = service_profile({"name": "?", "port": 139})
+            samba445 = service_profile({"name": "?", "port": 445})
+            self.assertEqual(samba139["display_name"], "Samba / SMB")
+            self.assertEqual(samba139["app_role"], "netbios")
+            self.assertEqual(samba445["app_role"], "smb")
+            self.assertFalse(samba445["app_entry"])
             self.assertIsNone(service_profile({"name": "unknown"}))
 
         def test_runtimes(self):
