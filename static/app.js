@@ -568,15 +568,7 @@ function renderAgentPanel(agents) {
     const statusPill = `<span class="st-badge ${hCls}">${labels[hCls] || esc(x.status || x.health)}</span>`;
     const loc = x.tmx ? `tmux: ${esc(x.tmx)}` : esc(x.cwd || "—");
 
-    let wakeBtn = "";
-    if (x.tmx && x.tmx !== "—") {
-      const sname = x.tmx.split(":")[0];
-      wakeBtn = `
-        <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(sname)}" data-target="${esc(x.tmx)}" title="${t("tac_wake_title")}">
-          ${icon("bolt", 11)} <span>${t("tac_wake")}</span>
-        </button>
-      `;
-    }
+    const wakeBtn = "";
 
     const ago = (x.idle_seconds !== undefined && x.idle_seconds !== null) ? agoStr(x.idle_seconds) : "—";
     const fullDate = x.last_activity ? x.last_activity.replace("T", " ") : "";
@@ -1662,8 +1654,9 @@ function svcIdentity(e) {
   else if (realUnit) { main = realUnit; sub = unit; }
   else {
     const generic = isModule || !scriptBase || interp.has(scriptBase) || scriptBase === "dashboard";
-    if (!generic && scriptBase !== cwdBase && cwdBase !== "tetsuya") { main = scriptBase; sub = cwd; }
-    else if (cwdBase && cwdBase !== "tetsuya") { main = cwdBase; sub = cmdShort; }
+    const runtimeUser = ((TL_CONF.hosts || {}).ssh_user || "");
+    if (!generic && scriptBase !== cwdBase && cwdBase !== runtimeUser) { main = scriptBase; sub = cwd; }
+    else if (cwdBase && cwdBase !== runtimeUser) { main = cwdBase; sub = cmdShort; }
     else { main = (e.name || "?").replace(/\s*\(docker\)/, ""); sub = cmdShort; }
   }
   const tip = [cmdline, cwd ? `cwd: ${cwd}` : "", unit ? `unit: ${unit}` : ""].filter(Boolean).join("\n");
@@ -2503,7 +2496,7 @@ async function renderNetworkPage(force) {
               <button type="button" class="btn-ts-mini gcopy" data-copy="${escAttr(ip)}" title="${t("ts_copy_ip")}">
                 ${icon("copy", 11)} <span>${t("ts_copy_ip")}</span>
               </button>
-              <button type="button" class="btn-ts-mini gcopy" data-copy="ssh tetsuya@${escAttr(ip)}" title="${t("ts_copy_ssh")}">
+              <button type="button" class="btn-ts-mini gcopy" data-copy="ssh ${escAttr((TL_CONF.hosts || {}).ssh_user || "user")}@${escAttr(ip)}" title="${t("ts_copy_ssh")}">
                 ${icon("term", 11)} <span>${t("ts_copy_ssh")}</span>
               </button>
             </div>
@@ -5217,67 +5210,6 @@ async function cleanExec() {
     `<span class='tl-val'><b>${fmtB(d.df_freed)}</b></span></div>`;
   btn.textContent = t("tl_clean_exec");
   btn.hidden = true;
-}
-
-// --- F3b AI 一键清理 (首页面板 + 全屏日志弹层) ---
-let _aiTimer = null;
-const _aiPoll = async () => {
-  try { return await tlGet("/api/aicleanup"); } catch (e) { return { status: "unknown", log_tail: "" }; }
-};
-async function aiOpenModal() {
-  const modal = $("aiclean-modal");
-  modal.hidden = false;
-  document.body.classList.add("modal-open");
-  aiRefresh();          // 立即拉一次并进入轮询
-}
-function aiCloseModal() {
-  $("aiclean-modal").hidden = true;
-  document.body.classList.remove("modal-open");
-  clearTimeout(_aiTimer);
-  aiStatusChip();       // 首页 chip 同步一次
-}
-async function aiRefresh() {
-  const st = await _aiPoll();
-  const log = $("aiclean-modal-log"), chip = $("aiclean-modal-st");
-  // 展示最近一次运行的完整日志 (从 ===== 分隔符起), 无则提示
-  const tail = st.log_tail || "";
-  const lastRun = tail.lastIndexOf("===== aiclean start");
-  log.textContent = lastRun >= 0 ? tail.slice(lastRun) : (tail || t("tl_aiclean_running"));
-  log.scrollTop = log.scrollHeight;
-  chip.textContent = st.status === "running" ? `${t("tl_aiclean_running")} ${st.elapsed_s ?? 0}s`
-                  : st.status === "error" ? "✗ error" : "✓ done";
-  chip.className = "aiclean-st " + st.status;
-  const rerun = $("aiclean-modal-rerun");
-  clearTimeout(_aiTimer);
-  if (st.status === "running") _aiTimer = setTimeout(aiRefresh, document.hidden ? 5000 : 2000);   // 后台标签降频
-  else aiStatusChip();
-}
-async function aiStatusChip() {   // 首页面板按钮/状态行
-  const el = $("hp-aiclean-status"); if (!el) return;
-  const st = await _aiPoll();
-  el.textContent = st.status === "running" ? `${t("tl_aiclean_running")} ${st.elapsed_s ?? 0}s`
-                : st.status === "error" ? "✗ " + t("tl_aiclean_lasterr") : "✓ " + t("tl_aiclean_idle");
-  el.className = "hp-aiclean-st " + st.status;
-  const btn = $("hp-aiclean-run");
-  if (btn) btn.textContent = st.status === "running" ? t("tl_aiclean_running") : t("tl_aiclean_run");
-}
-async function aiRerun() {
-  if (!await uiConfirm(t("tl_aiclean_confirm"))) return;
-  const r = await tlPost("/api/aicleanup", {});
-  if (!r.ok) { uiNotice(r.msg || "failed"); return; }
-  aiRefresh();
-}
-async function aiCleanHome() {
-  const st = await _aiPoll();
-  if (st.status === "running") { aiOpenModal(); return; }        // 在跑: 直接看实时日志
-  // 空闲: 每次点击都发起一轮新清理(确认弹窗防误触)——不再"只带你看上次报告",
-  // 旧报告仍在弹层日志里, 看报告→弹层底部"发起一轮新清理"重跑也保留
-  if (!await uiConfirm(t("tl_aiclean_confirm"))) return;
-  const btn = $("hp-aiclean-run");
-  if (btn) btn.textContent = "…";
-  const r = await tlPost("/api/aicleanup", {});
-  if (!r.ok) { uiNotice(r.msg || "failed"); if (btn) btn.textContent = t("tl_aiclean_run"); return; }
-  aiOpenModal();
 }
 
 // --- G3 网络速测 ---
