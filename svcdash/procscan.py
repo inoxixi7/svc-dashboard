@@ -290,10 +290,10 @@ def proc_info(pid):
     return info
 _docker_ps_cache = {"t": 0.0, "map": {}}
 def docker_port_map():
-    """docker ps 的端口映射: 宿主机端口 -> (容器名, 容器短ID)。
+    """docker ps 的端口映射与容器状态。
 
-    访问时即扫(无后台刷新)。2s 内的重复请求复用结果,避免同一页面加载
-    的 HTML+API 两次请求各扫一遍。docker ps 本身很快(远快于 ss)。
+    返回宿主机端口 -> {name, id, status, health}。普通用户看不到
+    docker-proxy 的 /proc 信息时，这仍是识别容器归属与健康状态的权威来源。
     """
     now = time.time()
     if now - _docker_ps_cache["t"] < 2:
@@ -301,7 +301,7 @@ def docker_port_map():
     mapping = {}
     try:
         proc = subprocess.Popen(
-            ["docker", "ps", "--format", "{{.ID}}\t{{.Names}}\t{{.Ports}}"],
+            ["docker", "ps", "--format", "{{.ID}}\t{{.Names}}\t{{.Ports}}\t{{.Status}}"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, start_new_session=True,
         )
@@ -317,10 +317,21 @@ def docker_port_map():
         if len(parts) < 3:
             continue
         cid, name, ports = parts[0], parts[1], parts[2]
+        status = parts[3] if len(parts) > 3 else ""
+        low = status.lower()
+        if "(healthy)" in low:
+            health = "healthy"
+        elif "(unhealthy)" in low:
+            health = "unhealthy"
+        elif "(health: starting)" in low or "(starting)" in low:
+            health = "starting"
+        else:
+            health = ""
+        meta = {"name": name, "id": cid[:12], "status": status, "health": health}
         for chunk in ports.split(","):
             m = re.search(r":(\d+)->", chunk.strip())
             if m:
-                mapping.setdefault(int(m.group(1)), (name, cid[:12]))
+                mapping.setdefault(int(m.group(1)), meta)
     _docker_ps_cache.update({"t": now, "map": mapping})
     return mapping
 
@@ -418,6 +429,7 @@ def gather(lang=DEFAULT_LANG):
             "name": "?", "cmdline": "", "cwd": None,
             "type": "direct", "unit": None, "container_id": None,
             "scope": "user", "docker_proxy": False, "is_self": False,
+            "listening": True,
         })
         if pid is None:
             # 自己的进程找不到? 用 sudo ss 层的数据兜底
@@ -462,9 +474,12 @@ def gather(lang=DEFAULT_LANG):
         # 此时进程名可能仍是 "?"；不要再依赖先识别出 docker-proxy。
         # 只要 docker ps 明确声明该宿主端口属于容器，就按容器服务归类。
         if e["port"] in docker_ports:
-            cname, cid = docker_ports[e["port"]]
+            dmeta = docker_ports[e["port"]]
+            cname, cid = dmeta["name"], dmeta["id"]
             e["type"] = "docker"
             e["container_id"] = cid
+            e["container_status"] = dmeta.get("status", "")
+            e["container_health"] = dmeta.get("health", "")
             e["scope"] = "docker"
             e["docker_proxy"] = True
             e["name"] = f"{cname} (docker)"
