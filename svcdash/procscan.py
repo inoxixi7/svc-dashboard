@@ -232,19 +232,25 @@ def service_profile(entry):
     if entry.get("is_self") or (
             entry.get("port") == 8180 and (unit == "svc-dashboard.service" or cwd.endswith("/svc-dashboard"))):
         return {"app_id": "mikata", "display_name": "Mikata",
-                "app_category": "Dashboard", "app_priority": 100}
+                "app_category": "Dashboard", "app_priority": 100,
+                "app_role": "dashboard", "app_entry": True}
 
     if name == "adguardhome" or "adguardhome" in unit:
+        port = int(entry.get("port") or 0)
+        role = "web" if port == 8080 else ("setup" if port == 3000 else ("dns" if port == 53 else "service"))
         return {"app_id": "adguard-home", "display_name": "AdGuard Home",
-                "app_category": "DNS / Network", "app_priority": 90}
+                "app_category": "DNS / Network", "app_priority": 90,
+                "app_role": role, "app_entry": port == 8080}
 
     if "private-splendor-web-web" in name:
         return {"app_id": "private-splendor", "display_name": "Private Splendor",
-                "app_category": "Game", "app_priority": 80}
+                "app_category": "Game", "app_priority": 80,
+                "app_role": "web", "app_entry": True}
 
     if "private-splendor-web-server" in name:
         return {"app_id": "private-splendor-api", "display_name": "Splendor API",
-                "app_category": "Backend", "app_priority": 60}
+                "app_category": "Backend", "app_priority": 60,
+                "app_role": "api", "app_entry": False}
 
     return None
 def nice_name(cmdline):
