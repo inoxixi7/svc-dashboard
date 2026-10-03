@@ -5,6 +5,7 @@ import gzip, hashlib, hmac, ipaddress, json, os, re, secrets, socket, time
 from html import escape
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
+from svcdash.runtime_env import USER as RUN_USER
 
 from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl, runtimes
 from svcdash.i18n import t, detect_lang, DEFAULT_LANG
@@ -531,7 +532,9 @@ class Handler(BaseHTTPRequestHandler):
                 if kind == "timer":
                     svc_unit = name if name.endswith(".service") else f"{name}.service"
                     if scope == "user":
-                        cmd = ["systemctl", "--machine=tetsuya@.host", "--user", "start", svc_unit]
+                        cmd = (["systemctl", f"--machine={RUN_USER}@.host", "--user", "start", svc_unit]
+                               if os.geteuid() == 0 and RUN_USER != "root"
+                               else ["systemctl", "--user", "start", svc_unit])
                     else:
                         cmd = ["sudo", "-n", "systemctl", "start", svc_unit]
                     p = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
