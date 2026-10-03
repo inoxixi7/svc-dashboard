@@ -1,6 +1,5 @@
 import json, os, re, subprocess, time
-from svcdash.goals import watchdog_goals, parse_completed_goals
-from svcdash.agents import scan_omp, scan_codex
+from svcdash.agents import scan_codex
 from svcdash.i18n import t, DEFAULT_LANG
 # ---------------- 仓库层: agent/goal 改动过的 git 仓库 ----------------
 # 仓库集合来自现成数据源(watchdog GOALS workdir / 完成台账 workdir /
@@ -43,13 +42,7 @@ def agent_repos():
     if _repo_set_cache["repos"] is not None and now - _repo_set_cache["t"] < 60:
         return _repo_set_cache["repos"]
     dirs = []
-    for g in watchdog_goals().values():
-        if g.get("workdir"):
-            dirs.append(g["workdir"])
-    for c in parse_completed_goals(limit=100):
-        if c.get("workdir"):
-            dirs.append(c["workdir"])
-    for a in scan_omp() + scan_codex():
+    for a in scan_codex():
         if a.get("cwd"):
             dirs.append(a["cwd"])
     roots = {}
@@ -384,6 +377,33 @@ def _traj_data(repo):
         except ValueError:
             continue
         evs.append({"ts": ts, "kind": "commit", "gid": parts[0], "name": "", "text": parts[2]})
+    # g3 profile: Git-only trajectory. Do not read upstream watchdog/OMP logs.
+    evs.sort(key=lambda x: -x["ts"])
+    by_day = {}
+    for e in evs:
+        lt = time.localtime(e["ts"])
+        d = by_day.setdefault((lt.tm_year, lt.tm_mon, lt.tm_mday), {})
+        d["commit"] = d.get("commit", 0) + 1
+    base = time.localtime()
+    noon = time.mktime((base.tm_year, base.tm_mon, base.tm_mday, 12, 0, 0, 0, 0, -1))
+    strip = []
+    for i in range(_TRAJ_DAYS - 1, -1, -1):
+        lt = time.localtime(noon - i * 86400)
+        c = by_day.get((lt.tm_year, lt.tm_mon, lt.tm_mday)) or {}
+        strip.append({"d": "%d/%d" % (lt.tm_mon, lt.tm_mday),
+                      "cls": "commit" if c.get("commit") else None,
+                      "bot": None, "n": c.get("commit", 0),
+                      "c": {"commit": c["commit"]} if c.get("commit") else {}})
+    data = {"strip": strip,
+            "events": [{"ts": e["ts"],
+                        "time": time.strftime("%m-%d %H:%M", time.localtime(e["ts"])),
+                        "kind": "commit", "cls": "commit",
+                        "name": "", "text": (e.get("text") or "")[:200]}
+                       for e in evs[:500]]}
+    _traj_cache["data"][repo] = data
+    _traj_cache["t"] = now
+    return data
+
     wd_evs = _traj_watchdog_by_root().get(repo) or []
     evs.extend(wd_evs)
     omp = _traj_omp_by_root(_TRAJ_DAYS * 86400).get(repo) or {}
