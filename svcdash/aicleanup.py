@@ -12,12 +12,13 @@
 # 跑 `omp -p --no-session`, 输出落 /tmp/svcdash-aiclean.log, 状态存模块级。
 
 import os
+from svcdash.runtime_env import HOME
 import subprocess
 import threading
 from svcdash.i18n import t, DEFAULT_LANG
 import time
 
-_OMP = "/home/tetsuya/.bun/bin/omp"
+_OMP = os.path.join(HOME, ".bun/bin/omp")
 _LOG = "/tmp/svcdash-aiclean.log"
 _LOCK = threading.Lock()
 _STATE = {"status": "idle", "started": 0.0, "pid": None}
@@ -77,9 +78,9 @@ def _work():
             p = subprocess.Popen(
                 [_OMP, "-p", "--no-session", "--auto-approve", PROMPT],
                 stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                cwd="/home/tetsuya", start_new_session=True,
-                env={**os.environ, "HOME": "/home/tetsuya",
-                     "PATH": "/home/tetsuya/.bun/bin:" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")})
+                cwd=HOME, start_new_session=True,
+                env={**os.environ, "HOME": HOME,
+                     "PATH": os.path.join(HOME, ".bun/bin") + ":" + os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")})
             with _LOCK:
                 _STATE["pid"] = p.pid
             rc = p.wait(timeout=MAX_RUN_S)
