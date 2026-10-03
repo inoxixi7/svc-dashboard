@@ -317,6 +317,13 @@ def selftest():
             self.assertIn("!!e.app_id && e.app_entry === true", src)
             self.assertNotIn("return !e.paused && normalWeb;", src)
 
+        def test_ai_coding_labels(self):
+            self.assertEqual(L10N["zh"]["tab_agent"], "AI Coding")
+            self.assertEqual(L10N["zh"]["agent_hub_title"], "AI Coding")
+            self.assertEqual(L10N["zh"]["agent_kpi_tasks"], "最近会话")
+            self.assertIn("AI Coding", L10N["en"]["agent_search_ph"])
+            self.assertIn("AI Coding", L10N["ja"]["agent_search_ph"])
+
         def test_service_group_labels_present(self):
             for lang in ("zh", "en", "ja"):
                 table = L10N[lang]
