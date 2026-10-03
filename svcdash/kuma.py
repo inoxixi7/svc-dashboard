@@ -82,7 +82,7 @@ def _auth_header():
 def _fetch_metrics():
     req = urllib.request.Request(
         KUMA_URL + "/metrics",
-        headers={"Accept": "text/plain", "User-Agent": "Mikata/1.0"},
+        headers={"Accept": "text/plain", "User-Agent": "G3-Hub/1.0"},
     )
     auth = _auth_header()
     if auth:
