@@ -1434,7 +1434,7 @@ async function renderPortalTmux() {
 }
 
 function serviceLink(e) {
-  if (e.is_self || e.app_id === "mikata") return location.href;
+  if (e.is_self || e.app_id === "g3-hub") return location.href;
   let host = location.hostname;
   if (host === "127.0.0.1" || host === "localhost" || host === "::1") {
     host = LAN_HOST || host;
