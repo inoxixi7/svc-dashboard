@@ -15,6 +15,6 @@ DASHBOARD_STATE_DIR = os.path.abspath(os.path.expanduser(
     os.environ.get("SVC_DASHBOARD_STATE_DIR", "~/.local/state/svc-dashboard")
 ))
 ENABLED_AGENTS = tuple(
-    x.strip() for x in os.environ.get("SVC_DASHBOARD_AGENTS", "codex").split(",")
+    x.strip() for x in os.environ.get("SVC_DASHBOARD_AGENTS", "codex,claude").split(",")
     if x.strip()
 )
