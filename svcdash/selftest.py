@@ -293,7 +293,7 @@ def selftest():
 
         def test_g3_service_profiles(self):
             from svcdash.procscan import service_profile
-            self.assertEqual(service_profile({"is_self": True, "port": 8180})["app_id"], "mikata")
+            self.assertEqual(service_profile({"is_self": True, "port": 8180})["app_id"], "g3-hub")
             ad_dns = service_profile({"name": "adguardhome (docker)", "port": 53})
             ad_web = service_profile({"name": "adguardhome (docker)", "port": 8080})
             self.assertEqual(ad_dns["display_name"], "AdGuard Home")
