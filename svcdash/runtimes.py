@@ -1,16 +1,8 @@
-"""Agent 运行时总览: 已知 agent 注册表 + 安装/卸载 + 进程 + 活跃任务 + 额度。
+"""g3 Agent runtime view.
 
-只读扫描 + 受控装卸动作(白名单命令, 后台线程 + 台账持久化)。
-数据源:
-- 注册表: 12 个已知 agent(与 ~/dotfiles/agent/* wrapper 一一对应 + 本机 hermes)
-- 二进制: PATH + 固定候选路径; 版本: <bin> --version (10 分钟缓存)
-- 进程:   /proc/*/cmdline 按 argv basename 精确匹配(防参数路径误报)
-- 任务:   omp → agents.scan_omp() 活会话; grok → active_sessions.json(pid 存活校验);
-          codex/claude → 数据目录 24h 内新文件
-- 额度:   bash ~/dotfiles/agent/agent-quota.sh --json (codex/agy/grok/kiro/cursor 五家,
-          后台线程刷新, 5 分钟缓存; 输出归一化为 buckets)
-- 安装:   以 dashboard 数据所有者运行 wrapper --version（wrapper 缺失自动装）
-- 卸载:   npm uninstall -g <pkg> 或按注册表删 bin
+The upstream compatibility catalog is retained below, but the active REGISTRY
+is filtered by SVC_DASHBOARD_AGENTS and defaults to Codex only. This keeps the
+dashboard from probing unrelated OMP/Hermes/third-party agent installations.
 """
 import json
 import os
