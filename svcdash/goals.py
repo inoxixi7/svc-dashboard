@@ -443,8 +443,7 @@ def goal_detail(gid, session="", lang=DEFAULT_LANG):
 
 
 # 快捷工具入口: 端口存活才显示(chips)
-TOOL_LINKS = [("dbeditor", 8810), ("dbviewer", 8800),
-              ("wilviewer", 8765), ("mapviewer", 8899)]
+TOOL_LINKS = []
 
 
 # ---- Goal 恢复执行 ----
