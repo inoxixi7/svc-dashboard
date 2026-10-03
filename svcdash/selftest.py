@@ -274,7 +274,13 @@ def selftest():
         def test_g3_service_profiles(self):
             from svcdash.procscan import service_profile
             self.assertEqual(service_profile({"is_self": True, "port": 8180})["app_id"], "mikata")
-            self.assertEqual(service_profile({"name": "adguardhome (docker)"})["display_name"], "AdGuard Home")
+            ad_dns = service_profile({"name": "adguardhome (docker)", "port": 53})
+            ad_web = service_profile({"name": "adguardhome (docker)", "port": 8080})
+            self.assertEqual(ad_dns["display_name"], "AdGuard Home")
+            self.assertEqual(ad_dns["app_role"], "dns")
+            self.assertFalse(ad_dns["app_entry"])
+            self.assertEqual(ad_web["app_role"], "web")
+            self.assertTrue(ad_web["app_entry"])
             self.assertEqual(service_profile({"name": "private-splendor-web-web-1 (docker)"})["app_id"], "private-splendor")
             self.assertEqual(service_profile({"name": "private-splendor-web-server-1 (docker)"})["app_id"], "private-splendor-api")
             self.assertIsNone(service_profile({"name": "unknown"}))
