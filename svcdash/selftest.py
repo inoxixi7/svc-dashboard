@@ -258,13 +258,18 @@ def selftest():
                     "ip": "0.0.0.0", "port": 18080, "inode": "999999"
                 }]
                 procscan.inode_to_pid = lambda: {}
-                procscan.docker_port_map = lambda: {18080: ("adguardhome", "abc123")}
+                procscan.docker_port_map = lambda: {18080: {
+                    "name": "adguardhome", "id": "abc123",
+                    "status": "Up 2 weeks (healthy)", "health": "healthy"
+                }}
                 procscan.priv_lookup = lambda port, ip: None
                 rows = procscan.gather()
                 row = next(x for x in rows if x["port"] == 18080)
                 self.assertEqual(row["type"], "docker")
                 self.assertEqual(row["name"], "adguardhome (docker)")
                 self.assertEqual(row["display_name"], "AdGuard Home")
+                self.assertEqual(row["container_health"], "healthy")
+                self.assertTrue(row["listening"])
             finally:
                 procscan.listen_sockets = original_listen
                 procscan.inode_to_pid = original_inode
