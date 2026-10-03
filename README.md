@@ -2,7 +2,7 @@
 
 本机监听服务一览表 —— 在浏览器里列出服务器当前后台运行的对外 TCP 服务，并展示系统负载/CPU/内存/磁盘状态、OMP/Codex agent 任务、goal 进度、定时任务、服务管理、健康检查与垃圾清理。
 
-纯 Python 标准库实现，零第三方依赖。访问 `http://<服务器>/` 即可使用（默认监听 80 端口）。
+纯 Python 标准库实现，零第三方依赖。本 fork 采用安全默认：仅监听 `127.0.0.1:8080`，避免管理面板直接暴露到 LAN/公网。
 
 ## 项目结构
 
@@ -134,53 +134,48 @@ static/
 
 ```bash
 # 1. 克隆
-git clone https://github.com/iamcheyan/svc-dashboard.git
+git clone https://github.com/inoxixi7/svc-dashboard.git
 cd svc-dashboard
 
 # 2. 直接运行（前台，Ctrl+C 退出）
 python3 dashboard.py
 
 # 3. 浏览器打开
-# http://127.0.0.1/
+# http://127.0.0.1:8080/
 ```
 
 命令行参数：
 
 | 参数 | 说明 | 默认 |
 |---|---|---|
-| `--port <N>` | 监听端口 | `80` |
-| `--host <IP>` | 监听地址 | `0.0.0.0` |
+| `--port <N>` | 监听端口 | `8080` |
+| `--host <IP>` | 监听地址 | `127.0.0.1` |
 | `--scan` | 一次性扫描服务列表并打印 JSON 后退出 | — |
 | `--selftest` | 离线自检（单测 + 真实数据源 dry-run） | — |
 
 ## 部署为服务
 
-80 是特权端口，需 root 运行。项目内置单元模板 `svc-dashboard.service`：
+本 fork 默认按**用户级 systemd 服务**运行，不使用 root，并固定监听 `127.0.0.1:8080`：
 
 ```bash
-# 系统级服务（监听 80，需 root；本机实际部署方式）
-sudo cp svc-dashboard.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now svc-dashboard
-sudo systemctl restart svc-dashboard      # 改代码后重启
-
-# 或用户级服务（无需 root，改端口避免 80 冲突）
 mkdir -p ~/.config/systemd/user
 cp svc-dashboard.service ~/.config/systemd/user/
-# 编辑 ExecStart 追加 --port 8080
+
 systemctl --user daemon-reload
 systemctl --user enable --now svc-dashboard
-loginctl enable-linger $USER               # 登出后仍运行
+loginctl enable-linger "$USER"              # 登出后仍运行
 ```
 
 验证：
 
 ```bash
-systemctl is-active svc-dashboard           # active
-curl -s http://127.0.0.1/api/sys | head -c 200
-python3 dashboard.py --selftest            # 自检
-journalctl -u svc-dashboard -f             # 日志
+systemctl --user is-active svc-dashboard
+curl -s http://127.0.0.1:8080/api/sys | head -c 200
+python3 dashboard.py --selftest
+journalctl --user -u svc-dashboard -f
 ```
+
+如果需要从外部设备访问，建议通过 Tailcat/Tailscale/SSH 端口转发暴露 `127.0.0.1:8080`，不要直接改为 `0.0.0.0` 后开放到公网。
 
 资源限制（unit 文件内置）：`MemoryMax=512M`（额度刷新要 spawn node/codex 子进程，原 128M 会 OOM） / `CPUQuota=40%` / `TasksMax=64`（实测空闲 ~17MB、0% CPU）。
 
