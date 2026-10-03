@@ -1,7 +1,8 @@
 import os, re, time, urllib.request, xml.etree.ElementTree as ET
 from datetime import datetime
 
-FEED_URL = os.environ.get("SVC_GITHUB_FEED") or "https://github.com/iamcheyan.atom"
+GITHUB_USER = os.environ.get("SVC_GITHUB_USER") or "inoxixi7"
+FEED_URL = os.environ.get("SVC_GITHUB_FEED") or f"https://github.com/{GITHUB_USER}.atom"
 FEED_CACHE_SEC = 300  # 5 分钟本地缓存，防触发 GitHub 限流
 
 _cache = {"t": 0.0, "etag": None, "data": []}
@@ -84,16 +85,16 @@ def _parse_atom(xml_bytes):
         if commit_blocks:
             for full_sha, short_sha, msg in commit_blocks:
                 clean_msg = re.sub(r"<[^>]+>", "", msg).strip()
-                c_url = f"https://github.com/iamcheyan/{repo}/commit/{full_sha}" if repo else event_url
+                c_url = f"https://github.com/{GITHUB_USER}/{repo}/commit/{full_sha}" if repo else event_url
                 items.append({
                     "ts": ts,
                     "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)),
                     "gid": short_sha[:7],
                     "name": repo or "git",
                     "kind": "commit",
-                    "text": f"{clean_msg} — iamcheyan",
+                    "text": f"{clean_msg} — {GITHUB_USER}",
                     "subject": clean_msg,
-                    "author": "iamcheyan",
+                    "author": GITHUB_USER,
                     "src": "github",
                     "url": c_url,
                     "repo": repo,
@@ -113,7 +114,7 @@ def _parse_atom(xml_bytes):
                 "kind": "commit",
                 "text": title,
                 "subject": title,
-                "author": "iamcheyan",
+                "author": GITHUB_USER,
                 "src": "github",
                 "url": event_url,
                 "repo": repo,
@@ -164,7 +165,7 @@ def merge_commits(local_commits, gh_events, total=60):
             matched_gh_keys.add(key)
             item = dict(lc)
             item["origin"] = "both"
-            item["url"] = ge.get("url") or f"https://github.com/iamcheyan/{lc['name']}/commit/{lc['gid']}"
+            item["url"] = ge.get("url") or f"https://github.com/{GITHUB_USER}/{lc['name']}/commit/{lc['gid']}"
             merged.append(item)
         else:
             # 仅本地有
