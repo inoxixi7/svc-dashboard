@@ -120,8 +120,9 @@ def selftest():
                 os.utime(p, (0, 0))                              # 强制 mtime 变化
                 self.assertEqual(h._svc_token(), "rotated-token")
                 self.assertEqual(os.stat(p).st_mode & 0o777, 0o600)
+            from svcdash.config import DASHBOARD_STATE_DIR
             h._TOKEN_PATHS = ("/etc/svc-dashboard/token",
-                              os.path.expanduser("~/.omp/svc-dashboard/token"))
+                              os.path.join(DASHBOARD_STATE_DIR, "token"))
 
         def test_agent_detail_public_redaction(self):
             detail = {
@@ -249,7 +250,7 @@ def selftest():
             # 注册表: id 唯一, 装卸动作白名单
             ids = [a["id"] for a in rt.REGISTRY]
             self.assertEqual(len(ids), len(set(ids)))
-            self.assertIn("omp", ids) and self.assertIn("codex", ids)
+            self.assertEqual(ids, ["codex"])
             # 额度归一化: 各家真实结构样本
             q = rt._parse_codex_quota({"account": {"account": {"email": "a@b.c",
                 "planType": "plus"}},
@@ -280,13 +281,13 @@ def selftest():
             self.assertEqual(q["buckets"][0]["remaining_pct"], 45)
             # 进程扫描可运行且包含已知 agent 键
             procs = rt.scan_procs()
-            self.assertIn("omp", procs) and self.assertIn("hermes", procs)
+            self.assertIn("codex", procs)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(T)
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(I18nParityTest))
     unittest.TextTestRunner(verbosity=2).run(suite)
     print("\n--- live dry-run ---")
-    gl = scan_goals()
+    gl = []  # g3 profile disables upstream OMP/watchdog goals
     print(f"goal cards: {len(gl)}")
     for g in gl:
         print(f"  {g['name']}: light={g['light']} ctx={g['ctx_raw'] or '—'} "
