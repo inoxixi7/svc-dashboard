@@ -170,29 +170,63 @@ function row(e, mobile) {
 // key=ip:port(一个监听一行), sig=整行 HTML: 内容没变的行 <tr> 节点原地保留,
 // 悬停/按钮态/长按上下文不闪; 变化的行单独 replaceWith; 顺序按数据序插入。
 const svcRows = new Map();   // key -> {html, node}
+
+function svcGroup(e) {
+  const appId = e.app_id || "";
+  if (appId === "ssh" || appId === "samba") return "network";
+  if (appId) return "apps";
+  if (e.type === "docker" || e.scope === "docker") return "docker";
+  if (e.scope === "system") return "system";
+  return "apps";
+}
+
 function renderSvcRows(tbody, shown, mobile) {
   if (!shown.length) {
     if (!tbody.querySelector("td.empty"))
-      tbody.innerHTML = '<tr><td class="empty" colspan="6">' + t("no_match") + '</td></tr>';
+      tbody.innerHTML = '<tr><td class="empty" colspan="4">' + t("no_match") + '</td></tr>';
     svcRows.clear();
     return;
   }
-  const want = new Set();
+
+  const groupDefs = [
+    ["apps", t("svc_group_apps")],
+    ["network", t("svc_group_network")],
+    ["docker", t("svc_group_docker")],
+    ["system", t("svc_group_system")],
+  ];
+  const buckets = new Map(groupDefs.map(([id]) => [id, []]));
+  shown.forEach(e => buckets.get(svcGroup(e)).push(e));
+  for (const arr of buckets.values()) {
+    arr.sort((a, b) => (b.app_priority || 0) - (a.app_priority || 0) || a.port - b.port);
+  }
+
+  const seq = [];
+  groupDefs.forEach(([gid, label]) => {
+    const arr = buckets.get(gid);
+    if (!arr || !arr.length) return;
+    seq.push({
+      key: "group:" + gid,
+      html: `<tr class="svc-group-row"><td colspan="4"><span class="svc-group-title">${escHtml(label)}</span><span class="svc-group-count">${arr.length}</span></td></tr>`
+    });
+    arr.forEach((e, i) => {
+      let key = "svc:" + (e.ip || "?") + ":" + e.port;
+      if (seq.some(x => x.key === key)) key += "#" + i;
+      seq.push({ key, html: row(e, mobile) });
+    });
+  });
+
+  const want = new Set(seq.map(x => x.key));
   let prev = null;
-  shown.forEach((e, i) => {
-    let key = (e.ip || "?") + ":" + e.port;
-    if (want.has(key)) key += "#" + i;        // ip:port 撞车兜底
-    want.add(key);
-    const html = row(e, mobile);
-    let ent = svcRows.get(key);
-    if (!ent || ent.html !== html) {
+  seq.forEach(item => {
+    let ent = svcRows.get(item.key);
+    if (!ent || ent.html !== item.html) {
       if (tbody.querySelector("td.empty")) tbody.innerHTML = "";
       const tpl = document.createElement("template");
-      tpl.innerHTML = html.trim();
+      tpl.innerHTML = item.html.trim();
       const node = tpl.content.firstElementChild;
       if (ent) ent.node.replaceWith(node);
-      ent = { html, node };
-      svcRows.set(key, ent);
+      ent = { html: item.html, node };
+      svcRows.set(item.key, ent);
     }
     if (ent.node.parentElement !== tbody || ent.node.previousElementSibling !== prev)
       tbody.insertBefore(ent.node, prev ? prev.nextSibling : tbody.firstChild);
