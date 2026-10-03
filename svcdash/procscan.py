@@ -231,7 +231,7 @@ def service_profile(entry):
 
     if entry.get("is_self") or (
             entry.get("port") == 8180 and (unit == "svc-dashboard.service" or cwd.endswith("/svc-dashboard"))):
-        return {"app_id": "mikata", "display_name": "Mikata",
+        return {"app_id": "g3-hub", "display_name": "G3 Hub",
                 "app_category": "Dashboard", "app_priority": 100,
                 "app_role": "dashboard", "app_entry": True}
 
