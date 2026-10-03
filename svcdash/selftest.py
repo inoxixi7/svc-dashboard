@@ -291,6 +291,16 @@ def selftest():
             self.assertEqual(rows["3"]["status"], 3)
             self.assertEqual(rows["4"]["status"], 2)
 
+        def test_service_table_collapses_listener_duplicates(self):
+            app_js = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "app.js")
+            with open(app_js, encoding="utf-8") as f:
+                src = f.read()
+            self.assertIn("function collapseSvcListeners(", src)
+            self.assertIn("first.listen_ips", src)
+            self.assertIn('appId === "tailscale"', src)
+            self.assertIn("return collapsed.length;", src)
+            self.assertIn("d.ips && d.ips.length", src)
+
         def test_service_table_prefers_display_name(self):
             app_js = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "app.js")
             with open(app_js, encoding="utf-8") as f:
