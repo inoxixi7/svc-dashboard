@@ -276,6 +276,21 @@ def selftest():
                 procscan.docker_port_map = original_docker
                 procscan.priv_lookup = original_priv
 
+        def test_kuma_metrics_parser(self):
+            from svcdash.kuma import parse_metrics
+            raw = (
+                '# HELP monitor_status Monitor Status\n'
+                'monitor_status{monitor_id="1",monitor_name="Home",monitor_type="http"} 1\n'
+                'monitor_status{monitor_id="2",monitor_name="WAN",monitor_type="ping"} 0\n'
+                'monitor_status{monitor_id="3",monitor_name="Maintenance",monitor_type="http"} 3\n'
+                'monitor_status{monitor_id="4",monitor_name="Booting",monitor_type="tcp"} 2\n'
+            )
+            rows = {x["id"]: x for x in parse_metrics(raw)}
+            self.assertEqual(rows["1"]["status"], 1)
+            self.assertEqual(rows["2"]["name"], "WAN")
+            self.assertEqual(rows["3"]["status"], 3)
+            self.assertEqual(rows["4"]["status"], 2)
+
         def test_g3_service_profiles(self):
             from svcdash.procscan import service_profile
             self.assertEqual(service_profile({"is_self": True, "port": 8180})["app_id"], "mikata")
