@@ -439,11 +439,11 @@ def gather(lang=DEFAULT_LANG):
 
     entries = []
     for key, e in sorted(by_key.items(), key=lambda kv: kv[0][1]):
-        # docker-proxy / rootlesskit 是宿主机进程,但端口属于容器发布。
-        # 注意: 不要要求 type == "direct" — root 扫描下 docker-proxy 会被 cgroup
-        # 归类为 systemd(docker.service),那样容器重命名分支永远不触发。
-        if e["name"] in ("docker-proxy", "rootlesskit", "rootlessport") \
-                and e["port"] in docker_ports:
+        # docker ps 的宿主端口映射是容器归属的权威来源。
+        # 普通用户运行 dashboard 时通常无法读取 root docker-proxy 的 /proc/fd，
+        # 此时进程名可能仍是 "?"；不要再依赖先识别出 docker-proxy。
+        # 只要 docker ps 明确声明该宿主端口属于容器，就按容器服务归类。
+        if e["port"] in docker_ports:
             cname, cid = docker_ports[e["port"]]
             e["type"] = "docker"
             e["container_id"] = cid
