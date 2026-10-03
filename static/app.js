@@ -1614,15 +1614,17 @@ async function renderPortalAgent() {
     if (badge) badge.textContent = t("hp_installed_running", {
       installed: d.total_installed || 0, running: d.total_running || 0
     });
-    // g3 profile only exposes Codex; show it even when quota is unavailable.
-    const withQuota = agents.filter(a => a.id === "codex")
+    // g3 coding-agent overview: show installed Codex / Claude Code even when
+    // a provider has no quota API. Runtime/process state comes from /api/runtimes.
+    const codingAgents = agents
+      .filter(a => (a.id === "codex" || a.id === "claude") && a.installed)
       .sort((a, b) => (b.procs || 0) - (a.procs || 0));
 
-    if (!withQuota.length) {
+    if (!codingAgents.length) {
       body.innerHTML = `<div class="gempty">${escHtml(t("hp_no_agent_proc"))}</div>`;
       return;
     }
-    body.innerHTML = withQuota.map(a => {
+    body.innerHTML = codingAgents.map(a => {
       const buckets = (a.quota && a.quota.buckets) || [];
       // 工作目录摘要
       const cwds = [...new Set((a.proc_list || []).map(p =>
@@ -1660,7 +1662,7 @@ async function renderPortalAgent() {
       return `<div class="hp-ag-item" role="button" tabindex="0" data-nav="agent" data-agent="${escAttr(a.id)}">
         <div class="hp-ag-item-head">
           <div class="hp-ag-title-wrap">
-            <span class="agent-status-dot on"></span>
+            <span class="agent-status-dot ${a.procs > 0 ? "on" : "idle"}"></span>
             <span class="hp-ag-name">${escHtml(a.name)}</span>
             <span class="hp-ag-procs">${a.procs}${escHtml(t("hp_procs_unit"))}</span>
           </div>
