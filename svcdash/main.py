@@ -12,11 +12,18 @@ from svcdash.selftest import selftest
 def main():
     args = sys.argv[1:]
     port = DEFAULT_PORT
+    host = LISTEN_HOST
     if "--port" in args:
         try:
             port = int(args[args.index("--port") + 1])
         except (ValueError, IndexError):
-            print("用法: dashboard.py [--port N] [--scan] [--selftest]")
+            print("用法: dashboard.py [--host IP] [--port N] [--scan] [--selftest]")
+            return 2
+    if "--host" in args:
+        try:
+            host = args[args.index("--host") + 1]
+        except IndexError:
+            print("用法: dashboard.py [--host IP] [--port N] [--scan] [--selftest]")
             return 2
     if "--scan" in args:
         print(json.dumps({"services": procscan.gather()}, ensure_ascii=False, indent=2))
@@ -42,9 +49,9 @@ def main():
         return deploy_gh_pages(cname=cname, lang=lang)
 
     os.environ["SVC_PORT"] = str(port)   # svcctl 守卫用: 识别自身端口, 拒绝暂停自己
-    httpd = ThreadingHTTPServer((LISTEN_HOST, port), Handler)
+    httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.daemon_threads = True
-    print(f"svc-dashboard 已启动: http://0.0.0.0:{port}/  (Ctrl+C 退出)", flush=True)
+    print(f"svc-dashboard 已启动: http://{host}:{port}/  (Ctrl+C 退出)", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

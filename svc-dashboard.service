@@ -1,16 +1,16 @@
 [Unit]
-Description=svc-dashboard - 本机监听服务一览 (port 80)
-After=network.target
+Description=svc-dashboard - 本机监听服务一览 (localhost:8080)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-# 按实际部署路径修改
-ExecStart=/usr/bin/python3 /home/tetsuya/development/svc-dashboard/dashboard.py
-WorkingDirectory=/home/tetsuya/development/svc-dashboard
+# Safe default: install this as a user service, not a root system service.
+WorkingDirectory=%h/svc-dashboard
+ExecStart=/usr/bin/python3 %h/svc-dashboard/dashboard.py --host 127.0.0.1 --port 8080
 Restart=on-failure
 RestartSec=3
-# 资源限制:防止失控拖垮系统(无人访问时实际只用 ~17MB、0% CPU)
-MemoryMax=512M              # 额度刷新 spawn node 子进程, 128M 会被打爆
+MemoryMax=512M
 CPUQuota=40%
 TasksMax=64
 

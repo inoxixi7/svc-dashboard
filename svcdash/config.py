@@ -1,8 +1,10 @@
 import os
 
-DEFAULT_PORT = 80
+DEFAULT_PORT = 8080
 AUTO_REFRESH_SEC = 10
-LISTEN_HOST = "0.0.0.0"
+# Security-first default: only expose the dashboard on the local machine.
+# Use --host explicitly if remote interface binding is intentionally required.
+LISTEN_HOST = "127.0.0.1"
 SERVER_VER = "1.0"
 DEFAULT_LANG = "zh"
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
