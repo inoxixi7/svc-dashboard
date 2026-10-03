@@ -1443,7 +1443,21 @@ function serviceLink(e) {
   return `http://${host}:${e.port}/`;
 }
 
-function renderPortalSvc(services) {
+let kumaSummaryCache = null;
+let kumaSummaryT = 0;
+async function loadKumaSummary(force = false) {
+  const now = Date.now();
+  if (!force && kumaSummaryCache && now - kumaSummaryT < 15000) return kumaSummaryCache;
+  try {
+    kumaSummaryCache = await tlGet("/api/kuma");
+  } catch (_) {
+    kumaSummaryCache = { ok: false, error: "unreachable" };
+  }
+  kumaSummaryT = now;
+  return kumaSummaryCache;
+}
+
+function renderPortalSvc(services, kuma) {
   const body = $("hp-body-svc"), badge = $("hp-badge-svc");
   if (!body) return;
   const svcs = services || [];
@@ -1477,11 +1491,23 @@ function renderPortalSvc(services) {
     const detail = [e.app_category, e.app_role && e.app_role !== "web" ? e.app_role : ""]
       .filter(Boolean).join(" · ") || id.sub || "active";
     const health = e.container_health || "";
-    const state = health === "healthy" ? "✓ healthy"
+    let state = health === "healthy" ? "✓ healthy"
       : health === "unhealthy" ? "✗ unhealthy"
       : health === "starting" ? "… starting"
       : (e.type === "docker" ? "● running" : (e.listening ? "● listening" : ""));
-    const resTxt = [detail, state,
+    let monitorState = "";
+    if (e.app_id === "uptime-kuma" && kuma) {
+      if (kuma.ok) {
+        monitorState = kuma.down > 0
+          ? `✗ ${kuma.down} DOWN / ${kuma.total}`
+          : kuma.pending > 0
+            ? `… ${kuma.pending} PENDING / ${kuma.total}`
+            : `✓ ${kuma.up}/${kuma.total} UP`;
+      } else if (kuma.auth_required) {
+        monitorState = "metrics key required";
+      }
+    }
+    const resTxt = [detail, monitorState || state,
       r ? `${r.cpu.toFixed(0)}% · ${Math.round(r.mem_mb)}M` : ""
     ].filter(Boolean).join(" · ");
     return `<a class="hp-svc-chip" href="${escAttr(link)}" target="${e.is_self ? "_self" : "_blank"}" rel="noopener">
@@ -1585,16 +1611,18 @@ async function renderOverview(apiData) {
   if (apiData && apiData.services) {
     lastSvc = { ok: apiData.services.filter(s => !s.paused).length, total: apiData.services.length };
   }
-  const d = await fetchGoalsData();
+  const [d, kuma] = await Promise.all([fetchGoalsData(), loadKumaSummary()]);
   const goals = (d && d.goals) || [];
   const events = (d && d.events) || [];
   const alerts = goalAlerts(goals).filter(a => !ignoredSet().has(a.key));
   const nRun = goals.filter(g => g.light === "active" || g.light === "retry").length;
   const nBad = goals.filter(g => g.light === "paused" || g.light === "lost" || g.stalled).length;
-  const nAlert = alerts.length;
-  // 总体状态: 图标+文字双通道; 红=有严重(会话丢失) 黄=有告警 绿=全部正常
+  const kumaDown = kuma && kuma.ok ? (kuma.down || 0) : 0;
+  const kumaPending = kuma && kuma.ok ? (kuma.pending || 0) : 0;
+  const nAlert = alerts.length + kumaDown + kumaPending;
+  // Kuma DOWN is severe; PENDING is warning. Missing credentials do not make g3 unhealthy.
   const ok = nAlert === 0;
-  const cls = ok ? "ok" : alerts.some(a => a.sev === "bad") ? "bad" : "warn";
+  const cls = ok ? "ok" : (kumaDown > 0 || alerts.some(a => a.sev === "bad")) ? "bad" : "warn";
   const txt = ok ? t("st_all_ok") : t("st_alert", { n: nAlert });
   const ico = ok ? "ok" : "warn";
   const sc = $("statuscard"), sl = $("statusline");
@@ -1613,7 +1641,7 @@ async function renderOverview(apiData) {
 
   // 渲染首页四大中枢概览卡片
   renderPortalActivity(events);
-  renderPortalSvc(apiData && apiData.services);
+  renderPortalSvc(apiData && apiData.services, kuma);
   await Promise.allSettled([renderPortalTmux(), renderPortalAgent()]);
 }
 function renderHomeTiles(services) {
