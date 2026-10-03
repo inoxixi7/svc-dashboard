@@ -35,7 +35,7 @@ static/
 
 ## 功能（四页签，移动优先）
 
-- **概览**：服务器状态、关键资源、常用服务、Goal 摘要、少量最近活动；空告警/空 Goal/空事件区块默认隐藏
+- **概览**：服务器状态、关键资源、常用服务、Uptime Kuma 监控汇总、少量最近活动；空告警区块默认隐藏
 - **服务**：紧凑展示服务名、端口、状态、CPU/内存/运行时长；命令、工作目录、PID 等放入详情
 - **Goal**：运行中、异常、最近完成的 Goal 与详情
 - **管理**：模型、Agent、日志、定时任务、网络/健康检查、垃圾清理、工具直达与偏好设置
@@ -109,7 +109,7 @@ static/
 | `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
 | `GET /api/svcctl` | GET | 服务暂停台账 + 暂停/恢复历史 |
 | `POST /api/svcctl` | POST | `{"port":N,"action":"pause"\|"resume"}` 任意服务冻结/解冻（容器→docker pause，其余→SIGSTOP；台账持久化，守卫拒绝 dashboard 自身/SSH/受保护进程） |
-| `/api/health` | GET | 一次性健康快检（系统/磁盘趋势/温度/进程/端口/看门狗） |
+| `/api/kuma` | GET | Uptime Kuma `/metrics` 汇总（UP/DOWN/PENDING/MAINTENANCE；凭据仅从环境变量读取） |\n| `/api/health` | GET | 一次性健康快检（系统/磁盘趋势/温度/进程/端口） |
 | `/api/nettest` | GET | 外网延迟 + tailscale 对端 ping |
 | `/api/toolports` | GET | 工具直达 chips 端口存活 |
 | `/api/uservice` | GET | 用户级 systemd 服务列表 |
@@ -192,3 +192,16 @@ journalctl --user -u svc-dashboard -f
 ## 许可证
 
 MIT
+
+
+## Uptime Kuma 监控汇总
+
+Mikata 可读取本机 Uptime Kuma 的 Prometheus `/metrics`，默认地址为
+`http://127.0.0.1:3001`。推荐在 Uptime Kuma 中创建 API Key，并通过
+systemd 环境变量 `SVC_KUMA_API_KEY` 提供；密钥不要提交到仓库。
+
+可选变量：
+
+- `SVC_KUMA_URL`：Kuma 地址，默认 `http://127.0.0.1:3001`
+- `SVC_KUMA_API_KEY`：推荐，Uptime Kuma API Key
+- `SVC_KUMA_USER` / `SVC_KUMA_PASSWORD`：未启用 API Key 时的 Basic Auth 兼容方式
