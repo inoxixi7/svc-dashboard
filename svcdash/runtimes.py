@@ -492,9 +492,10 @@ def _run_as_owner(cmd, timeout=300):
                 f'{HOME}/.opencode/bin:{HOME}/.fnm:{HOME}/.local/share/fnm:'
                 f'/usr/local/bin:/usr/bin:/bin" && ')
     try:
-        out = subprocess.run(["/usr/sbin/runuser", "-u", "tetsuya", "--", "bash", "-c",
-                              env_path + cmd],
-                             capture_output=True, text=True, timeout=timeout)
+        argv = ["bash", "-c", env_path + cmd]
+        if os.geteuid() == 0 and RUN_USER != "root":
+            argv = ["/usr/sbin/runuser", "-u", RUN_USER, "--"] + argv
+        out = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
         txt = ((out.stdout or "") + (("\n[stderr] " + out.stderr) if out.stderr else "")).strip()
         return out.returncode, txt[-4000:]
     except subprocess.TimeoutExpired:
