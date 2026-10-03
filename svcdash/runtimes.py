@@ -1,8 +1,8 @@
 """g3 Agent runtime view.
 
 The upstream compatibility catalog is retained below, but the active REGISTRY
-is filtered by SVC_DASHBOARD_AGENTS and defaults to Codex only. This keeps the
-dashboard from probing unrelated OMP/Hermes/third-party agent installations.
+is filtered by SVC_DASHBOARD_AGENTS and defaults to Codex + Claude Code. This
+keeps the dashboard focused on the coding agents intentionally used on g3.
 """
 import json
 import os
@@ -51,7 +51,8 @@ _ALL_REGISTRY = [
      "wrapper": DOTFILES_AGENT + "/codex.sh", "npm_pkg": "@openai/codex",
      "quota": "codex"},
     {"id": "claude", "name": "Claude Code",
-     "bins": ["claude", HOME + "/.fnm/node-versions/*/installation/bin/claude"],
+     "bins": [HOME + "/.local/bin/claude", "claude",
+              HOME + "/.fnm/node-versions/*/installation/bin/claude"],
      "names": {"claude"},
      "wrapper": DOTFILES_AGENT + "/claude-code.sh", "npm_pkg": "@anthropic-ai/claude-code"},
     {"id": "agy", "name": "Antigravity (Gemini)", "bins": [HOME + "/.local/bin/agy"],
@@ -889,8 +890,13 @@ def scan_runtimes():
             root = HOME + "/.claude/projects"
             n, recent = _recent_files(root)
             entry["meta"]["sessions_24h"] = n
-            entry["tasks"] = [{"kind": "file", "file": r["file"], "age_sec": r["age_sec"]}
-                              for r in recent]
+            # Running Claude processes are the primary signal because they expose
+            # the real cwd. Recent project files remain as a lightweight history.
+            entry["tasks"] = _process_tasks(aid, plist)
+            entry["tasks"].extend(
+                {"kind": "file", "file": r["file"], "age_sec": r["age_sec"]}
+                for r in recent
+            )
         if not entry["tasks"] and plist:
             entry["tasks"] = _process_tasks(aid, plist)
         if a.get("quota"):
