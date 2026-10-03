@@ -6,9 +6,9 @@ from svcdash.procscan import read, gather
 from svcdash.sysinfo import sys_info
 from svcdash.goals import WATCHDOG_LOG
 from svcdash.i18n import t, DEFAULT_LANG
+from svcdash.runtime_env import HOME as HOME_DIR, USER as RUN_USER, UID as RUN_UID
 
-# 清理扫描的目标家目录(与 runtimes.HOME 同一约定)。
-HOME_DIR = "/home/tetsuya"
+# 清理扫描的目标家目录与当前 dashboard 数据所有者一致。
 # ================= 工具页: 健康检查 / 垃圾清理 / 网络速测 / 用户服务 =================
 # 全部纯标准库; 写操作只限下方枚举路径(红线: 用户媒体/System.db/git 历史/.env 永不触碰)。
 
@@ -523,8 +523,12 @@ def net_test(lang=DEFAULT_LANG):
 
 
 def _usvc_cmd(args, timeout):
-    return _run(["sudo", "-n", "-u", "tetsuya", "env",
-                 "XDG_RUNTIME_DIR=/run/user/1000"] + args, timeout=timeout)
+    if os.geteuid() == 0 and RUN_USER != "root":
+        cmd = ["sudo", "-n", "-u", RUN_USER, "env",
+               f"XDG_RUNTIME_DIR=/run/user/{RUN_UID}"] + args
+    else:
+        cmd = list(args)
+    return _run(cmd, timeout=timeout)
 
 
 def user_services():
