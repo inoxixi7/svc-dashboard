@@ -1,5 +1,6 @@
 import glob, json, os, re, subprocess, time
 from svcdash.i18n import t, DEFAULT_LANG
+from svcdash.runtime_env import HOME, USER as RUN_USER, UID as RUN_UID, user_command
 from svcdash.agents import (_tmux_run, _omp_tmux_panes, _tmux_capture,
                             _tmux_by_cwd, scan_tmux, _omp_tail,
                             OMP_SESSION_ROOT, _event_text)
@@ -7,10 +8,10 @@ from svcdash.agents import (_tmux_run, _omp_tmux_panes, _tmux_capture,
 # 只读采集: goal_watchdog.sh 的 GOALS 数组 + goal-completed 台账 +
 # watchdog 日志 + tmux pane 实时画面 + session jsonl 活跃度。
 # 全部在请求时同步采集(8s 缓存),无后台线程;解析失败一律降级不抛错。
-WATCHDOG_SCRIPT = "/home/tetsuya/development/Mir3-Research/scripts/goal_watchdog.sh"
-WATCHDOG_LOG = "/home/tetsuya/.omp/logs/goal-watchdog.log"
-GOAL_COMPLETED_LOG = "/home/tetsuya/.omp/logs/goal-completed.log"
-OMP_BIN = "/home/tetsuya/.bun/bin/omp"
+WATCHDOG_SCRIPT = os.environ.get("SVC_WATCHDOG_SCRIPT", os.path.join(HOME, "development/Mir3-Research/scripts/goal_watchdog.sh"))
+WATCHDOG_LOG = os.environ.get("SVC_WATCHDOG_LOG", os.path.join(HOME, ".omp/logs/goal-watchdog.log"))
+GOAL_COMPLETED_LOG = os.environ.get("SVC_GOAL_COMPLETED_LOG", os.path.join(HOME, ".omp/logs/goal-completed.log"))
+OMP_BIN = os.environ.get("SVC_OMP_BIN", os.path.join(HOME, ".bun/bin/omp"))
 CTX_WARN_K = 800.0    # 上下文 > 800K 黄色警示
 CTX_STOP_K = 1200.0   # 上下文 > 1.2M 红色"建议停止"
 GOAL_STALLED_SEC = 600  # 最近活动 > 10 分钟标灰(watchdog 会处理)
@@ -448,13 +449,13 @@ TOOL_LINKS = [("dbeditor", 8810), ("dbviewer", 8800),
 
 # ---- Goal 恢复执行 ----
 _SAFE_PREFIXES = ("/home/", "omp ", "agy ", "codex ", "~/.bun/", "/root/")
-# 服务以 root 运行，目标用户是 tetsuya（UID 1000），tmux socket 在 /tmp/tmux-1000/default
-_RESUME_USER = "tetsuya"
-_RESUME_UID  = 1000
+# 默认使用运行 dashboard 的数据所有者；root 部署可通过环境变量覆盖。
+_RESUME_USER = RUN_USER
+_RESUME_UID  = RUN_UID
 
 def goal_resume(resume_cmd: str, hint_session: str = "", lang=DEFAULT_LANG) -> tuple:
     """在用户 tmux session 里执行 resume_cmd。
-    服务以 root 运行，通过 sudo -u tetsuya 在用户的 tmux socket 里创建 session。
+    root 部署会降权到数据所有者；普通用户部署直接使用当前用户 tmux。
     安全校验: 只允许已知路径前缀的 agent 命令。
     返回 (ok: bool, msg: str)。
     """
@@ -472,11 +473,12 @@ def goal_resume(resume_cmd: str, hint_session: str = "", lang=DEFAULT_LANG) -> t
     session_name = hint_session or f"resume-{sid_short}"
     # 找用户的 tmux socket
     import stat as _stat
-    socket_path = f"/tmp/tmux-{_RESUME_UID}/default"
-    if not os.path.exists(socket_path):
+    socket_dir = f"/tmp/tmux-{_RESUME_UID}"
+    socket_path = f"{socket_dir}/default"
+    if not os.path.exists(socket_path) and os.path.isdir(socket_dir):
         # 尝试找到任何可用的 socket
-        for f in os.listdir(f"/tmp/tmux-{_RESUME_UID}"):
-            socket_path = f"/tmp/tmux-{_RESUME_UID}/{f}"
+        for f in os.listdir(socket_dir):
+            socket_path = f"{socket_dir}/{f}"
             break
     has_tmux = subprocess.run(["which", "tmux"], capture_output=True).returncode == 0
     if has_tmux and os.path.exists(os.path.dirname(socket_path)):
@@ -487,7 +489,7 @@ def goal_resume(resume_cmd: str, hint_session: str = "", lang=DEFAULT_LANG) -> t
                 f"-x 220 -y 50 -- bash -c {repr(cmd)}"
             )
             r = subprocess.run(
-                ["sudo", "-u", _RESUME_USER, "bash", "-c", inner_cmd],
+                user_command(["bash", "-c", inner_cmd]),
                 capture_output=True, timeout=12,
             )
             if r.returncode == 0:
@@ -495,8 +497,8 @@ def goal_resume(resume_cmd: str, hint_session: str = "", lang=DEFAULT_LANG) -> t
         # fallback: 直接 tmux（不指定 socket）
         for sname in [session_name, session_name + "-b2"]:
             r = subprocess.run(
-                ["sudo", "-u", _RESUME_USER, "tmux", "new-session", "-d", "-s", sname,
-                 "-x", "220", "-y", "50", "--", "bash", "-c", cmd],
+                user_command(["tmux", "new-session", "-d", "-s", sname,
+                 "-x", "220", "-y", "50", "--", "bash", "-c", cmd]),
                 capture_output=True, timeout=12,
             )
             if r.returncode == 0:
@@ -505,5 +507,5 @@ def goal_resume(resume_cmd: str, hint_session: str = "", lang=DEFAULT_LANG) -> t
     # fallback: nohup 后台（不会出现在 tmux，但进程会跑）
     log_path = f"/tmp/resume-{sid_short}.log"
     inner = f"nohup bash -c {repr(cmd)} > {log_path} 2>&1 &"
-    os.system(f"sudo -u {_RESUME_USER} bash -c {repr(inner)}")
+    subprocess.run(user_command(["bash", "-c", inner]), capture_output=True, timeout=5)
     return True, t(lang, "mm_goal_bg", p=log_path)
