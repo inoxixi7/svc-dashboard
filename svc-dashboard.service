@@ -1,5 +1,5 @@
 [Unit]
-Description=svc-dashboard - 本机监听服务一览 (localhost:8080)
+Description=svc-dashboard - 本机监听服务一览 (localhost:8180)
 After=network-online.target
 Wants=network-online.target
 
@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 # Safe default: install this as a user service, not a root system service.
 WorkingDirectory=%h/svc-dashboard
-ExecStart=/usr/bin/python3 %h/svc-dashboard/dashboard.py --host 127.0.0.1 --port 8080
+ExecStart=/usr/bin/python3 %h/svc-dashboard/dashboard.py --host 127.0.0.1 --port 8180
 Restart=on-failure
 RestartSec=3
 MemoryMax=512M
