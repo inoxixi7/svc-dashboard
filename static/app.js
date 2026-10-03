@@ -1496,13 +1496,10 @@ function renderPortalSvc(services, kuma) {
   if (!body) return;
   const svcs = services || [];
   const candidates = svcs.filter(e => {
-    const ip = e.ip || "";
-    const loop = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
-    const normalWeb = e.scope !== "system" && !loop && ![22000, 5355].includes(+e.port);
-    // Known g3 apps only appear on the overview when this listener is their
-    // canonical UI entry point. Raw listeners remain visible on the Services page.
-    if (e.app_id) return !e.paused && e.app_entry === true;
-    return !e.paused && normalWeb;
+    // G3 Hub overview is an application launcher, not a raw port browser.
+    // Only explicitly catalogued canonical app entry points belong here.
+    // Unknown listeners stay available on the Services page for diagnostics.
+    return !e.paused && !!e.app_id && e.app_entry === true;
   });
   const seen = new Set(), uniq = [];
   candidates
