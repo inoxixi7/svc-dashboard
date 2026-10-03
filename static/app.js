@@ -1476,9 +1476,14 @@ function renderPortalSvc(services) {
     const r = e.res;
     const detail = [e.app_category, e.app_role && e.app_role !== "web" ? e.app_role : ""]
       .filter(Boolean).join(" · ") || id.sub || "active";
-    const resTxt = r
-      ? `${detail} · ${r.cpu.toFixed(0)}% · ${Math.round(r.mem_mb)}M`
-      : detail;
+    const health = e.container_health || "";
+    const state = health === "healthy" ? "✓ healthy"
+      : health === "unhealthy" ? "✗ unhealthy"
+      : health === "starting" ? "… starting"
+      : (e.type === "docker" ? "● running" : (e.listening ? "● listening" : ""));
+    const resTxt = [detail, state,
+      r ? `${r.cpu.toFixed(0)}% · ${Math.round(r.mem_mb)}M` : ""
+    ].filter(Boolean).join(" · ");
     return `<a class="hp-svc-chip" href="${escAttr(link)}" target="${e.is_self ? "_self" : "_blank"}" rel="noopener">
       <div class="hp-svc-head">
         <span class="hp-svc-name">${escHtml(id.main)}</span>
@@ -1639,7 +1644,10 @@ function renderHomeTiles(services) {
       resLine = `<span class="hp-tile-res${crit ? " crit" : hot ? " hot" : ""}">`
         + `${r.cpu.toFixed(1)}% · ${r.mem_mb >= 1024 ? (r.mem_mb / 1024).toFixed(1) + "G" : Math.round(r.mem_mb) + "M"} · ${fmtUp(r.up_sec)}</span>`;
     }
-    const tip = [id.tip, r ? `${t("svc_res_title")}: ${r.cpu.toFixed(1)}% · ${Math.round(r.mem_mb)}M · ${fmtUp(r.up_sec)}` : ""].filter(Boolean).join("\n");
+    const stateTip = e.container_status || (e.listening ? "listening" : "");
+    const tip = [id.tip, stateTip,
+      r ? `${t("svc_res_title")}: ${r.cpu.toFixed(1)}% · ${Math.round(r.mem_mb)}M · ${fmtUp(r.up_sec)}` : ""
+    ].filter(Boolean).join("\n");
     return `<a class="hp-tile${svp ? " sv-paused" : ""}" href="${escAttr(link)}" target="_blank" rel="noopener" title="${escAttr(tip)}">`
       + `<span class="hp-tile-main"><span class="hp-tile-name">${escHtml(id.main)}</span>`
       + `<span class="hp-tile-main-r"><span class="hp-tile-port">:${e.port}</span>${btn}</span></span>`
