@@ -366,7 +366,9 @@ def selftest():
             # 注册表: id 唯一, 装卸动作白名单
             ids = [a["id"] for a in rt.REGISTRY]
             self.assertEqual(len(ids), len(set(ids)))
-            self.assertEqual(ids, ["codex"])
+            self.assertEqual(ids, ["codex", "claude"])
+            claude_reg = next(a for a in rt.REGISTRY if a["id"] == "claude")
+            self.assertTrue(any(p.endswith("/.local/bin/claude") for p in claude_reg["bins"]))
             # 额度归一化: 各家真实结构样本
             q = rt._parse_codex_quota({"account": {"account": {"email": "a@b.c",
                 "planType": "plus"}},
@@ -398,6 +400,7 @@ def selftest():
             # 进程扫描可运行且包含已知 agent 键
             procs = rt.scan_procs()
             self.assertIn("codex", procs)
+            self.assertIn("claude", procs)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(T)
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(I18nParityTest))
