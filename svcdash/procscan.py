@@ -264,6 +264,19 @@ def service_profile(entry):
                 "app_role": "web", "app_entry": False,
                 "app_internal": port == 5244}
 
+    # 基础设施协议：详细服务页需要可读名称，但不应出现在首页“应用入口”中。
+    port = int(entry.get("port") or 0)
+    if port == 22 or name in ("sshd", "ssh") or "sshd.service" in unit:
+        return {"app_id": "ssh", "display_name": "SSH",
+                "app_category": "Remote Access", "app_priority": 20,
+                "app_role": "ssh", "app_entry": False}
+
+    if port in (139, 445) or name in ("smbd", "nmbd") or "smbd.service" in unit or "nmbd.service" in unit:
+        role = "netbios" if port == 139 else "smb"
+        return {"app_id": "samba", "display_name": "Samba / SMB",
+                "app_category": "File Sharing", "app_priority": 20,
+                "app_role": role, "app_entry": False}
+
     return None
 def nice_name(cmdline):
     """从 cmdline 里挑一个能认出的名字,如 python3 run.py -> run.py。"""
