@@ -244,6 +244,33 @@ def selftest():
             svcctl._log("resume", {"port": 1, "name": "x", "pids": [2]})
             self.assertEqual(len(svcctl.history()), 3)  # resume(65534) + 手写2条
 
+        def test_docker_port_mapping_does_not_require_proxy_pid(self):
+            # Regression guard: Docker ownership comes from docker ps host-port
+            # mappings, not from visibility of root-owned docker-proxy PIDs.
+            from svcdash import procscan
+            original_listen = procscan.listen_sockets
+            original_inode = procscan.inode_to_pid
+            original_docker = procscan.docker_port_map
+            original_priv = procscan.priv_lookup
+            try:
+                procscan.listen_sockets = lambda: [{
+                    "family": __import__("socket").AF_INET,
+                    "ip": "0.0.0.0", "port": 18080, "inode": "999999"
+                }]
+                procscan.inode_to_pid = lambda: {}
+                procscan.docker_port_map = lambda: {18080: ("adguardhome", "abc123")}
+                procscan.priv_lookup = lambda port, ip: None
+                rows = procscan.gather()
+                row = next(x for x in rows if x["port"] == 18080)
+                self.assertEqual(row["type"], "docker")
+                self.assertEqual(row["name"], "adguardhome (docker)")
+                self.assertEqual(row["display_name"], "AdGuard Home")
+            finally:
+                procscan.listen_sockets = original_listen
+                procscan.inode_to_pid = original_inode
+                procscan.docker_port_map = original_docker
+                procscan.priv_lookup = original_priv
+
         def test_g3_service_profiles(self):
             from svcdash.procscan import service_profile
             self.assertEqual(service_profile({"is_self": True, "port": 8180})["app_id"], "mikata")
