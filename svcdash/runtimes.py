@@ -9,7 +9,7 @@
           codex/claude → 数据目录 24h 内新文件
 - 额度:   bash ~/dotfiles/agent/agent-quota.sh --json (codex/agy/grok/kiro/cursor 五家,
           后台线程刷新, 5 分钟缓存; 输出归一化为 buckets)
-- 安装:   runuser -u tetsuya bash <wrapper> --version  (wrapper 缺失自动装, --version 装完即退)
+- 安装:   以 dashboard 数据所有者运行 wrapper --version（wrapper 缺失自动装）
 - 卸载:   npm uninstall -g <pkg> 或按注册表删 bin
 """
 import json
@@ -25,8 +25,8 @@ import time
 from datetime import datetime
 
 from svcdash import agents
+from svcdash.runtime_env import HOME, USER as RUN_USER
 
-HOME = "/home/tetsuya"
 DOTFILES_AGENT = HOME + "/dotfiles/agent"
 # 私有 chezmoi 部署的额度查询脚本；公开 dotfiles 路径仅作旧安装回退。
 QUOTA_SCRIPT = HOME + "/.config/agent/tools/agent-quota.sh"
@@ -485,8 +485,8 @@ QUOTA_PARSERS = {"codex": _parse_codex_quota, "agy": _parse_agy_quota,
                  "cursor": _parse_cursor_quota, "dim": _parse_dim_quota}
 
 
-def _runuser_tetsuya(cmd, timeout=300):
-    """以 tetsuya 身份跑命令(root 服务降权), 返回 (rc, 输出合并文本)。
+def _run_as_owner(cmd, timeout=300):
+    """以 dashboard 数据所有者身份跑命令(root 服务降权), 返回 (rc, 输出合并文本)。
     runuser 不加载登录环境, 显式注入用户 PATH(fnm/npm/agent bin)。"""
     env_path = (f'export PATH="{HOME}/.local/bin:{HOME}/.bun/bin:{HOME}/.grok/bin:'
                 f'{HOME}/.opencode/bin:{HOME}/.fnm:{HOME}/.local/share/fnm:'
@@ -533,7 +533,7 @@ def refresh_quota(force=False):
             # 在线 dashboard 以 root 运行时降权到数据所有者；静态发布器本来
             # 就以该用户运行，直接执行即可（runuser 切换到同 UID 会失败）。
             if os.geteuid() != os.stat(HOME).st_uid:
-                quota_cmd = ["/usr/sbin/runuser", "-u", "tetsuya", "--", *quota_cmd]
+                quota_cmd = ["/usr/sbin/runuser", "-u", RUN_USER, "--", *quota_cmd]
             out = subprocess.run(
                 quota_cmd,
                 capture_output=True, text=True, timeout=120)
@@ -773,14 +773,14 @@ def agentctl_start(agent_id, action, lang=DEFAULT_LANG):
                 if not w or not os.path.isfile(w):
                     ok, msg = False, "no install script"
                 else:
-                    rc, detail = _runuser_tetsuya(f"bash {w} --version", timeout=600)
+                    rc, detail = _run_as_owner(f"bash {w} --version", timeout=600)
                     installed = bool(find_bin(reg["bins"]))
                     ok = installed
                     msg = t(lang, "mm_ctl_installed") if ok else t(lang, "mm_ctl_install_fail", rc=rc)
             else:
                 pkg = reg.get("npm_pkg")
                 if pkg:
-                    rc, detail = _runuser_tetsuya(
+                    rc, detail = _run_as_owner(
                         f'eval "$(fnm env --shell bash)" 2>/dev/null; fnm use default 2>/dev/null; '
                         f'npm uninstall -g {pkg}', timeout=180)
                     ok = rc == 0
