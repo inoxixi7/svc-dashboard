@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 from svcdash.runtime_env import USER as RUN_USER
 
-from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl, runtimes
+from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl, runtimes, kuma
 from svcdash.i18n import t, detect_lang, DEFAULT_LANG
 from svcdash.config import SERVER_VER, DASHBOARD_STATE_DIR
 
@@ -309,6 +309,8 @@ class Handler(BaseHTTPRequestHandler):
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(200, {"events": agents.scan_agent_log(sid, lang) if sid else [],
                                   "capture": agents._tmux_capture(tmx)})
+        elif path == "/api/kuma":
+            self._send_json(200, kuma.summary())
         elif path == "/api/health":
             self._send_json(200, tools.health_check())
         elif path == "/api/nettest":
