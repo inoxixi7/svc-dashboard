@@ -559,7 +559,7 @@ def _tmux_capture(tmux_ref):
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout
         if not out.strip() and os.geteuid() == 0:
-            out = subprocess.run(["sudo", "-u", "tetsuya"] + cmd,
+            out = subprocess.run(user_command(cmd),
                                  capture_output=True, text=True, timeout=3).stdout
     except (OSError, subprocess.SubprocessError):
         return None
