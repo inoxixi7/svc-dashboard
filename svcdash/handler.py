@@ -9,7 +9,7 @@ from svcdash.runtime_env import USER as RUN_USER
 
 from svcdash import procscan, sysinfo, tasks, manage, agents, goals, repos, tools, render, svcctl, runtimes
 from svcdash.i18n import t, detect_lang, DEFAULT_LANG
-from svcdash.config import SERVER_VER
+from svcdash.config import SERVER_VER, DASHBOARD_STATE_DIR
 
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
 _STATIC_CACHE = {}   # relpath -> (raw_bytes, gz_bytes, etag)
@@ -19,7 +19,7 @@ _STATIC_CACHE = {}   # relpath -> (raw_bytes, gz_bytes, etag)
 # 页面不内嵌 token: GET 首页的匿名访客拿不到, 只有持有文件内容的调用者能 POST。
 # mtime 缓存 → 改文件即轮换, 免重启。
 _TOKEN_PATHS = ("/etc/svc-dashboard/token",
-                os.path.expanduser("~/.omp/svc-dashboard/token"))
+                os.path.join(DASHBOARD_STATE_DIR, "token"))
 _token_cache = {"mtime": None, "val": ""}
 
 
@@ -253,12 +253,9 @@ class Handler(BaseHTTPRequestHandler):
                 lim = max(1, min(200, int((qs.get("limit") or ["24"])[0])))
             except ValueError:
                 lim = 24
-            self._send_json(200, {"updated": time.time(), "goals": goals.scan_goals(),
-                                  "completed": goals.parse_completed_goals(limit=lim),
-                                  "events": goals.merge_events(
-                                      goals.parse_watchdog_events(limit=min(lim, 80)),
-                                      goals.parse_completed_goals(limit=lim),
-                                      repos.parse_repo_commits(), limit=lim)})
+            self._send_json(200, {"updated": time.time(), "goals": [],
+                                  "completed": [],
+                                  "events": repos.parse_repo_commits(total=lim)})
         elif path == "/api/repos":
             qs = parse_qs(urlparse(self.path).query)
             refresh = (qs.get("refresh") or ["0"])[0] in ("1", "true")
@@ -267,7 +264,8 @@ class Handler(BaseHTTPRequestHandler):
             lang = detect_lang(self.headers.get("Accept-Language", ""), urlparse(self.path).query)
             self._send_json(200, {"tasks": tasks.scan_tasks(lang)})
         elif path == "/api/omp":
-            self._send_json(200, {"updated": time.time(), "omp": agents.scan_omp(),
+            # Compatibility endpoint: g3 profile exposes Codex sessions only.
+            self._send_json(200, {"updated": time.time(), "omp": [],
                                   "codex": agents.scan_codex()})
         elif path == "/api/tmux":
             self._send_json(200, agents.scan_tmux_full())
@@ -337,9 +335,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, runtimes.scan_models())
         elif path == "/api/toolports":
             self._send_json(200, tools.tool_ports_alive())
-        elif path == "/api/aicleanup":
-            from . import aicleanup
-            self._send_json(200, aicleanup.aicleanup_status())
         elif path == "/api/uservice":
             self._send_json(200, {"ok": True, "units": tools.user_services()})
         elif path == "/api/tailscale":
@@ -386,7 +381,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/manage", "/api/cleanup", "/api/aicleanup", "/api/uservice", "/api/svcctl", "/api/runtimes", "/api/models", "/api/goalresume", "/api/tmux/wake", "/api/tailscale/ping", "/api/tailscale/netcheck", "/api/tasks/run"):
+        if path not in ("/api/manage", "/api/cleanup", "/api/uservice", "/api/svcctl", "/api/runtimes", "/api/models", "/api/goalresume", "/api/tailscale/ping", "/api/tailscale/netcheck", "/api/tasks/run"):
             self.send_error(404)
             return
         # 先消费请求体再鉴权: 403(跨站/无token)提前返回时若 body 残留在
@@ -443,14 +438,6 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json(200, tools.cleanup_run(items, lang))
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
-        elif path == "/api/aicleanup":
-            from . import aicleanup
-            self.log_message("aicleanup %s", body)
-            try:
-                ok, msg = aicleanup.aicleanup_start(lang)
-                self._send_json(200, {"ok": ok, "msg": msg})
-            except Exception as e:
-                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
         elif path == "/api/uservice":
             unit = str(body.get("unit") or "")
             action = str(body.get("action") or "")
@@ -491,15 +478,6 @@ class Handler(BaseHTTPRequestHandler):
             self.log_message("goalresume cmd=%s", resume_cmd[:60])
             try:
                 ok, msg = goals.goal_resume(resume_cmd, hint_session, lang)
-                self._send_json(200, {"ok": ok, "msg": msg})
-            except Exception as e:
-                self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
-        elif path == "/api/tmux/wake":
-            session = str(body.get("session") or "")
-            pane = str(body.get("pane") or "")
-            self.log_message("tmux_wake session=%s pane=%s", session, pane)
-            try:
-                ok, msg = agents.tmux_wake_session(session, pane, lang)
                 self._send_json(200, {"ok": ok, "msg": msg})
             except Exception as e:
                 self._send_json(500, {"ok": False, "msg": f"server error: {e}"})
