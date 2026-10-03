@@ -291,6 +291,15 @@ def selftest():
             self.assertEqual(rows["3"]["status"], 3)
             self.assertEqual(rows["4"]["status"], 2)
 
+        def test_overview_only_uses_catalogued_entries(self):
+            # Source-level guard: the overview must not fall back to arbitrary
+            # non-system listeners, otherwise ephemeral high ports show as "?" cards.
+            app_js = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "app.js")
+            with open(app_js, encoding="utf-8") as f:
+                src = f.read()
+            self.assertIn("!!e.app_id && e.app_entry === true", src)
+            self.assertNotIn("return !e.paused && normalWeb;", src)
+
         def test_service_group_labels_present(self):
             for lang in ("zh", "en", "ja"):
                 table = L10N[lang]
