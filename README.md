@@ -2,7 +2,7 @@
 
 本机监听服务一览表 —— 在浏览器里列出服务器当前后台运行的对外 TCP 服务，并展示系统负载/CPU/内存/磁盘状态、OMP/Codex agent 任务、goal 进度、定时任务、服务管理、健康检查与垃圾清理。
 
-纯 Python 标准库实现，零第三方依赖。本 fork 采用安全默认：仅监听 `127.0.0.1:8080`，避免管理面板直接暴露到 LAN/公网。
+纯 Python 标准库实现，零第三方依赖。本 fork 采用安全默认：仅监听 `127.0.0.1:8180`，避免管理面板直接暴露到 LAN/公网。
 
 ## 项目结构
 
@@ -141,21 +141,21 @@ cd svc-dashboard
 python3 dashboard.py
 
 # 3. 浏览器打开
-# http://127.0.0.1:8080/
+# http://127.0.0.1:8180/
 ```
 
 命令行参数：
 
 | 参数 | 说明 | 默认 |
 |---|---|---|
-| `--port <N>` | 监听端口 | `8080` |
+| `--port <N>` | 监听端口 | `8180` |
 | `--host <IP>` | 监听地址 | `127.0.0.1` |
 | `--scan` | 一次性扫描服务列表并打印 JSON 后退出 | — |
 | `--selftest` | 离线自检（单测 + 真实数据源 dry-run） | — |
 
 ## 部署为服务
 
-本 fork 默认按**用户级 systemd 服务**运行，不使用 root，并固定监听 `127.0.0.1:8080`：
+本 fork 默认按**用户级 systemd 服务**运行，不使用 root，并固定监听 `127.0.0.1:8180`：
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -170,12 +170,12 @@ loginctl enable-linger "$USER"              # 登出后仍运行
 
 ```bash
 systemctl --user is-active svc-dashboard
-curl -s http://127.0.0.1:8080/api/sys | head -c 200
+curl -s http://127.0.0.1:8180/api/sys | head -c 200
 python3 dashboard.py --selftest
 journalctl --user -u svc-dashboard -f
 ```
 
-如果需要从外部设备访问，建议通过 Tailcat/Tailscale/SSH 端口转发暴露 `127.0.0.1:8080`，不要直接改为 `0.0.0.0` 后开放到公网。
+如果需要从外部设备访问，建议通过 Tailcat/Tailscale/SSH 端口转发暴露 `127.0.0.1:8180`，不要直接改为 `0.0.0.0` 后开放到公网。
 
 资源限制（unit 文件内置）：`MemoryMax=512M`（额度刷新要 spawn node/codex 子进程，原 128M 会 OOM） / `CPUQuota=40%` / `TasksMax=64`（实测空闲 ~17MB、0% CPU）。
 
@@ -186,7 +186,7 @@ journalctl --user -u svc-dashboard -f
 ## 注意事项
 
 - **权限**：需免密 sudo（`sudo -n`）才能完整显示 root/其他用户服务的 PID 与命令；无 sudo 时这些服务的 PID 栏为空，其余功能不受影响
-- **端口冲突**：80 被占用时改 `--port 8080`，或编辑单元文件 `ExecStart` 追加 `--port` 后 `daemon-reload && restart`
+- **端口冲突**：80 被占用时改 `--port 8180`，或编辑单元文件 `ExecStart` 追加 `--port` 后 `daemon-reload && restart`
 - **安全**：文件浏览已移除；垃圾清理 dry_run 默认 true，用户媒体/System.db/git 历史/.env 永不触碰
 
 ## 许可证
