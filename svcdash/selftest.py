@@ -283,6 +283,13 @@ def selftest():
             self.assertTrue(ad_web["app_entry"])
             self.assertEqual(service_profile({"name": "private-splendor-web-web-1 (docker)"})["app_id"], "private-splendor")
             self.assertEqual(service_profile({"name": "private-splendor-web-server-1 (docker)"})["app_id"], "private-splendor-api")
+            kuma = service_profile({"name": "uptime-kuma (docker)", "port": 3001})
+            self.assertEqual(kuma["display_name"], "Uptime Kuma")
+            self.assertTrue(kuma["app_entry"])
+            openlist = service_profile({"name": "openlist (docker)", "port": 5244})
+            self.assertEqual(openlist["display_name"], "OpenList")
+            self.assertFalse(openlist["app_entry"])
+            self.assertTrue(openlist["app_internal"])
             self.assertIsNone(service_profile({"name": "unknown"}))
 
         def test_runtimes(self):
