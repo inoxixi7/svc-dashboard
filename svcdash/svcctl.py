@@ -19,8 +19,9 @@ from svcdash.i18n import t, DEFAULT_LANG
 from svcdash.procscan import listen_sockets, inode_to_pid
 from svcdash.manage import _proc_owner_name, _proc_protected, PROTECTED_PROC_NAMES
 from svcdash.runtime_env import HOME
+from svcdash.config import DASHBOARD_STATE_DIR
 
-STATE_DIR = os.path.join(HOME, ".omp/svc-dashboard")
+STATE_DIR = DASHBOARD_STATE_DIR
 STATE_FILE = os.path.join(STATE_DIR, "paused.json")
 HISTORY_FILE = os.path.join(STATE_DIR, "actions.log")
 NO_PAUSE_PORTS = {22}          # sshd: 冻结后无法建立新连接, 自锁风险
