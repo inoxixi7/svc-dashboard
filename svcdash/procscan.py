@@ -252,6 +252,18 @@ def service_profile(entry):
                 "app_category": "Backend", "app_priority": 60,
                 "app_role": "api", "app_entry": False}
 
+    if name == "uptime-kuma" or "uptime-kuma" in unit:
+        return {"app_id": "uptime-kuma", "display_name": "Uptime Kuma",
+                "app_category": "Monitoring", "app_priority": 85,
+                "app_role": "web", "app_entry": True}
+
+    if name == "openlist" or "openlist" in unit:
+        port = int(entry.get("port") or 0)
+        return {"app_id": "openlist", "display_name": "OpenList",
+                "app_category": "Files", "app_priority": 70,
+                "app_role": "web", "app_entry": False,
+                "app_internal": port == 5244}
+
     return None
 def nice_name(cmdline):
     """从 cmdline 里挑一个能认出的名字,如 python3 run.py -> run.py。"""
