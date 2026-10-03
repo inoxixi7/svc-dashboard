@@ -200,13 +200,16 @@ def selftest():
             self.assertEqual(_wd_event_kind("goal paused: pid=1; driving with '继续'"), "nudge")
 
         def test_completed(self):
-            with open(GOAL_COMPLETED_LOG) as f:
-                real = f.read()
             entries = parse_completed_goals()
+            if not os.path.isfile(GOAL_COMPLETED_LOG):
+                self.assertEqual(entries, [])
+                return
+            with open(GOAL_COMPLETED_LOG, encoding="utf-8", errors="replace") as f:
+                real = f.read()
             if "Zircon全代码文档化" in real:
                 self.assertTrue(any("Zircon" in c["label"] for c in entries))
                 self.assertTrue(entries[0]["resume_cmd"].startswith(
-                    "/home/tetsuya/.bun/bin/omp"))
+                    os.path.join(os.path.expanduser("~"), ".bun/bin/omp")))
 
         def test_svcctl(self):
             import os, signal, subprocess, tempfile, time
