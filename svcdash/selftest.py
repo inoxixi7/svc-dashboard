@@ -291,6 +291,12 @@ def selftest():
             self.assertEqual(rows["3"]["status"], 3)
             self.assertEqual(rows["4"]["status"], 2)
 
+        def test_service_group_labels_present(self):
+            for lang in ("zh", "en", "ja"):
+                table = L10N[lang]
+                for key in ("svc_group_apps", "svc_group_network", "svc_group_docker", "svc_group_system"):
+                    self.assertTrue(table.get(key))
+
         def test_g3_service_profiles(self):
             from svcdash.procscan import service_profile
             self.assertEqual(service_profile({"is_self": True, "port": 8180})["app_id"], "g3-hub")
