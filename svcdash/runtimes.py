@@ -26,13 +26,14 @@ from datetime import datetime
 
 from svcdash import agents
 from svcdash.runtime_env import HOME, USER as RUN_USER
+from svcdash.config import ENABLED_AGENTS, DASHBOARD_STATE_DIR
 
 DOTFILES_AGENT = HOME + "/dotfiles/agent"
 # 私有 chezmoi 部署的额度查询脚本；公开 dotfiles 路径仅作旧安装回退。
 QUOTA_SCRIPT = HOME + "/.config/agent/tools/agent-quota.sh"
 if not os.path.isfile(QUOTA_SCRIPT):
     QUOTA_SCRIPT = DOTFILES_AGENT + "/agent-quota.sh"
-LEDGER_DIR = HOME + "/.omp/svc-dashboard"
+LEDGER_DIR = DASHBOARD_STATE_DIR
 LEDGER_FILE = LEDGER_DIR + "/agentctl.json"
 _CLK_TCK = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
 _rt_cache = {"t": 0.0, "data": None}
@@ -44,7 +45,7 @@ _ctl_lock = threading.Lock()
 # bins: 候选路径(绝对路径优先, 裸名走 PATH); names: /proc argv basename 匹配集;
 # extra_re: 额外 cmdline 正则; wrapper: dotfiles 安装脚本(None=不可装);
 # rm_bins: 卸载删除路径; npm_pkg: npm 全局包名(卸载用)
-REGISTRY = [
+_ALL_REGISTRY = [
     {"id": "omp", "name": "Oh My Pi", "bins": [HOME + "/.bun/bin/omp", HOME + "/.local/bin/omp"],
      "names": {"omp"}, "extra_re": r"__omp_worker|/\.bun/bin/omp",
      "wrapper": DOTFILES_AGENT + "/omp.sh",
@@ -97,6 +98,7 @@ REGISTRY = [
      "names": {"hermes"}, "wrapper": None,
      "extra_re": r"hermes_cli\.main|/hermes-agent/venv/bin"},
 ]
+REGISTRY = [a for a in _ALL_REGISTRY if a["id"] in ENABLED_AGENTS]
 _PROC_CACHE = {"t": 0.0, "data": None}
 
 
@@ -867,8 +869,6 @@ def scan_runtimes():
     if _rt_cache["data"] is not None and now - _rt_cache["t"] < 10:
         return _rt_cache["data"]
     procs = scan_procs()
-    omp_sessions = agents.scan_omp()
-    omp_active = [s for s in omp_sessions if s["health"] in ("running", "blocked")]
     qs = quota_snapshot()
     ctl = agentctl_status()
     result = []
@@ -881,13 +881,7 @@ def scan_runtimes():
                  "meta": _meta_for(a["id"]),
                  "installable": bool(a.get("wrapper"))}
         aid = a["id"]
-        if aid == "omp":
-            entry["tasks"] = [{"kind": "omp", "id": s["id"], "cwd": s["cwd"],
-                               "goal": s["goal"], "health": s["health"],
-                               "idle_seconds": s["idle_seconds"], "tool": s["tool"],
-                               "tmux": s["tmux"]} for s in omp_active[:6]]
-            entry["meta"]["sessions_total"] = len(omp_sessions)
-        elif aid == "agy":
+        if aid == "agy":
             entry["tasks"] = _agy_tasks()
         elif aid == "grok":
             entry["tasks"] = [{"kind": "grok", **t} for t in _grok_tasks()]
@@ -914,7 +908,7 @@ def scan_runtimes():
                 entry["quota"] = quota
         entry["task_count"] = len(entry["tasks"])
         result.append(entry)
-    data = {"updated": now, "agents": result, "models": scan_models(),
+    data = {"updated": now, "agents": result, "models": {"providers": []},
             "total_installed": sum(1 for a in REGISTRY if find_bin(a["bins"])),
             "total_running": sum(len(v) for v in procs.values()),
             "env_tools": _system_ai_env(),
