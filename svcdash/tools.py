@@ -14,12 +14,8 @@ from svcdash.runtime_env import HOME as HOME_DIR, USER as RUN_USER, UID as RUN_U
 
 
 # --- F2 健康检查 ---
-HEALTH_PROCS = [   # (显示名, 匹配串) 可配置列表
-    ("ServerCore (dotnet)", "ServerCore"),
-    ("syncthing", "syncthing"),
-    ("tailscaled", "tailscaled"),
-    ("immich-server", "immich"),
-]
+# g3 profile: do not mark unrelated upstream processes as required.
+HEALTH_PROCS = []
 DISK_HISTORY_PATH = "/tmp/svc-disk-history.json"
 _WD_BAD = re.compile(r"stalled|error|panic|timeout|fail|kill", re.I)
 
@@ -137,7 +133,10 @@ def port_heartbeat(entries):
 
 
 def watchdog_anomalies():
-    """最近 1h watchdog 异常计数(只解析 goal-watchdog.log 尾部 256K)。"""
+    """g3 profile does not use the upstream OMP goal watchdog."""
+    return {"count": 0, "sample": []}
+
+def _legacy_watchdog_anomalies_disabled():
     now = time.time()
     n, sample = 0, []
     try:
@@ -178,7 +177,7 @@ def local_hosts():
             lan = ip
         elif out_key == "tailscale" and ip.startswith("100."):
             ts_ip = ip
-    return {"lan": lan, "tailscale": ts_ip, "hostname": socket.gethostname()}
+    return {"lan": lan, "tailscale": ts_ip, "hostname": socket.gethostname(), "ssh_user": RUN_USER}
 
 
 def health_check():
@@ -368,12 +367,6 @@ CLEANUP_SCANS = [
     ("journal", _scan_journal, "cl_journal"),
     ("apt", _scan_apt, "cl_apt"),
     ("tmp_old", _wrap_scan("tmp_old", _tmp_old_paths, "cl_tmp_old"), None),
-    ("hermes_cache", _wrap_scan("hermes_cache", lambda: _aged_paths(
-        os.path.join(HOME_DIR, ".hermes", "cache", "terminal-output"), HERMES_OLD_DAYS),
-        "cl_hermes"), None),
-    ("omp_jsonl", _wrap_scan("omp_jsonl", lambda: _aged_paths(
-        os.path.join(HOME_DIR, ".omp", "agent"), OMP_JSONL_OLD_DAYS, suffix=".jsonl", recursive=True),
-        "cl_omp_jsonl"), None),
     ("binobj", _wrap_scan("binobj", _binobj_paths, "cl_binobj"), None),
     ("docker", _scan_docker, "cl_docker_readonly"),
 ]
@@ -431,10 +424,6 @@ CLEANUP_RUNNERS = {
     "journal": lambda lang=DEFAULT_LANG: _clean_journal(),
     "apt": lambda lang=DEFAULT_LANG: _clean_apt(),
     "tmp_old": lambda lang=DEFAULT_LANG: _make_path_cleaner(_tmp_old_paths, lang)(),
-    "hermes_cache": lambda lang=DEFAULT_LANG: _make_path_cleaner(lambda: _aged_paths(
-        os.path.join(HOME_DIR, ".hermes", "cache", "terminal-output"), HERMES_OLD_DAYS), lang)(),
-    "omp_jsonl": lambda lang=DEFAULT_LANG: _make_path_cleaner(lambda: _aged_paths(
-        os.path.join(HOME_DIR, ".omp", "agent"), OMP_JSONL_OLD_DAYS, suffix=".jsonl", recursive=True), lang)(),
     "binobj": lambda lang=DEFAULT_LANG: _make_path_cleaner(_binobj_paths, lang)(),
 }
 
@@ -570,7 +559,4 @@ def tool_ports_alive():
 
 def tools_conf():
     """页面内嵌工具配置: 主机地址 + G1 chips 端口表。"""
-    return {"hosts": local_hosts(),
-            "g1": [["dbeditor", 8810], ["mapviewer", 8899], ["wilviewer", 8765],
-                   ["uieditor", 8820], ["dbviewer", 8800], ["webclient", 8822],
-                   ["yomu", 8830], ["fudoki", 8831]]}
+    return {"hosts": local_hosts(), "g1": []}
