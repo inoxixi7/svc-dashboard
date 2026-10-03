@@ -1,6 +1,6 @@
-# svc-dashboard
+# G3 Hub
 
-本机监听服务一览表 —— 在浏览器里列出服务器当前后台运行的对外 TCP 服务，并展示系统负载/CPU/内存/磁盘状态、OMP/Codex agent 任务、goal 进度、定时任务、服务管理、健康检查与垃圾清理。
+G3 Hub 是 g3 的本地服务器控制台：在浏览器里查看系统资源、Docker/端口服务、Codex、Tmux、Git 活动和 Uptime Kuma 监控摘要。GitHub 仓库仍保留 `svc-dashboard` 名称，避免影响现有部署路径与 systemd 服务。
 
 纯 Python 标准库实现，零第三方依赖。本 fork 采用安全默认：仅监听 `127.0.0.1:8180`，避免管理面板直接暴露到 LAN/公网。
 
@@ -196,7 +196,7 @@ MIT
 
 ## Uptime Kuma 监控汇总
 
-Mikata 可读取本机 Uptime Kuma 的 Prometheus `/metrics`，默认地址为
+G3 Hub 可读取本机 Uptime Kuma 的 Prometheus `/metrics`，默认地址为
 `http://127.0.0.1:3001`。推荐在 Uptime Kuma 中创建 API Key，并通过
 systemd 环境变量 `SVC_KUMA_API_KEY` 提供；密钥不要提交到仓库。
 
