@@ -342,6 +342,12 @@ def selftest():
             self.assertEqual(samba139["app_role"], "netbios")
             self.assertEqual(samba445["app_role"], "smb")
             self.assertFalse(samba445["app_entry"])
+            ts4 = service_profile({"name": "?", "ip": "100.99.145.68", "port": 37561})
+            ts6 = service_profile({"name": "?", "ip": "fd7a:115c:a1e0::633b:9145", "port": 56615})
+            self.assertEqual(ts4["display_name"], "Tailscale")
+            self.assertEqual(ts6["display_name"], "Tailscale")
+            self.assertEqual(ts4["app_role"], "node-listener")
+            self.assertFalse(ts4["app_entry"])
             self.assertIsNone(service_profile({"name": "unknown"}))
 
         def test_runtimes(self):
