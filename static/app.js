@@ -113,7 +113,6 @@ const FILTERS = {
   web:    (e) => e.scope !== "system" && !e.paused && !((e.ip || "").startsWith("127.") || e.ip === "::1" || (e.ip || "").startsWith("::ffff:127.")) && ![22000, 5355].includes(+e.port),
   docker: (e) => e.scope === "docker",
   system: (e) => e.scope === "system",
-  omp:     () => false, // OMP 走独立面板,不混进服务表
   watchdog: () => false, // 看门狗走独立面板
   tmux:    () => false, // tmux 走独立面板
   tailscale: () => false, // tailscale 走独立面板
@@ -229,17 +228,6 @@ function applyFilter() {
       renderNetworkPage();
     }
     $("count").textContent = "Tailscale";
-    return;
-  }
-  if (filter === "omp") {
-    const tasksEl = $("tasks");
-    if (tasksEl) {
-      tasksEl.hidden = false;
-      tasksEl.className = "watchdog-panel";
-      tasksEl.innerHTML = `<h2>${t("a_title")} <span style="color:var(--text-dead);font-weight:400">${t("a_loading")}</span></h2>`;
-      loadAgents().then(renderAgentPanel);
-    }
-    $("count").textContent = t("chip_omp");
     return;
   }
   if (filter === "tmux") {
@@ -784,9 +772,6 @@ function renderTmuxPanel(panes) {
         <td class="tsch" data-label="${t("th_active_time")}">${ago}</td>
         <td data-label="${t("th_action")}">
           <div style="display:flex;align-items:center;gap:6px;">
-            <button type="button" class="btn-ts-mini btn-tmux-wake" data-sname="${esc(x.session)}" data-target="${esc(x.session + ':' + x.pane)}" title="${t("tac_wake_title")}">
-              ${icon("bolt", 11)} <span>${t("tac_wake")}</span>
-            </button>
             <button type="button" class="btn-ts-mini btn-tmux-preview" data-target="${esc(x.session + ':' + x.pane)}" title="${t("tac_preview_title")}">
               ${icon("play", 11)} <span>${t("tac_preview")}</span>
             </button>
@@ -1447,7 +1432,7 @@ async function renderPortalTmux() {
           </div>
           <div class="hp-tmux-sub">${t("hp_windows_count", { n: winCount })} · ${escHtml(cmd)}</div>
         </div>
-        <span class="hp-tmux-badge">${isAgent ? "Agent" : s.attached ? "attached" : "detached"}</span>
+        <span class="hp-tmux-badge">${isAgent ? "dev" : s.attached ? "attached" : "detached"}</span>
       </div>`;
     }).join("");
   } catch (e) {
@@ -1512,11 +1497,9 @@ async function renderPortalAgent() {
     if (badge) badge.textContent = t("hp_installed_running", {
       installed: d.total_installed || 0, running: d.total_running || 0
     });
-    // 只显示有额度数据的 agent，没有额度或查不到的一律不显示
-    const withQuota = agents.filter(a => {
-      const buckets = (a.quota && a.quota.buckets) || [];
-      return buckets.length > 0 && buckets.some(b => b.remaining_pct != null);
-    }).sort((a, b) => (b.procs || 0) - (a.procs || 0));
+    // g3 profile only exposes Codex; show it even when quota is unavailable.
+    const withQuota = agents.filter(a => a.id === "codex")
+      .sort((a, b) => (b.procs || 0) - (a.procs || 0));
 
     if (!withQuota.length) {
       body.innerHTML = `<div class="gempty">${escHtml(t("hp_no_agent_proc"))}</div>`;
@@ -2816,9 +2799,6 @@ async function renderTmuxPage() {
             <span class="tmux-badge tmux-badge-det">${s.windows_count} ${escHtml(t("tmux_total_windows"))}</span>
           </div>
           <div class="tmux-card-actions">
-            <button class="btn-tmux-act btn-tmux-wake" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="${escAttr(t("tmux_wake_title"))}">
-              ${icon("bolt", 12)} <span>${escHtml(t("tmux_wake"))}</span>
-            </button>
             <button class="btn-tmux-act btn-tmux-fullscreen" data-sname="${escAttr(s.name)}" data-target="${escAttr(activePane.pane ? `${s.name}:${activePane.pane}` : s.name)}" title="${escAttr(t('tmux_fullscreen'))}">
               ${icon("expand", 12)} <span>${escHtml(t("tmux_fullscreen"))}</span>
             </button>
@@ -4083,10 +4063,6 @@ function renderRuntimes(d) {
         <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_tasks"))}</div>
       </div>
       <div class="agent-kpi-card">
-        <div class="agent-kpi-val" style="color:#a78bfa;">${escHtml(t("agent_kpi_gateway_count", { n: provs.length }))}</div>
-        <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_models"))}</div>
-      </div>
-      <div class="agent-kpi-card">
         <div class="agent-kpi-val" style="color:${low.length ? '#f87171' : '#4ade80'};">${escHtml(low.length ? t("agent_kpi_warn_count", { n: low.length }) : t("agent_kpi_quota_ok"))}</div>
         <div class="agent-kpi-lbl">${escHtml(t("agent_kpi_quota_warn"))}</div>
       </div>
@@ -4715,45 +4691,6 @@ document.addEventListener("click", async (e) => {
   }, 4000);
 });
 
-// --- Tmux 会话「⚡ 唤醒推进」按钮: 调用 Hermes 自动判断并推进任务 ---
-document.addEventListener("click", async (e) => {
-  const btn = e.target.closest(".btn-tmux-wake");
-  if (!btn) return;
-  e.preventDefault(); e.stopPropagation();
-  const sname = btn.dataset.sname;
-  if (!sname) return;
-  btn.disabled = true;
-  const origHtml = btn.innerHTML;
-  btn.innerHTML = `${icon("bolt", 12)} <span>⚡ ${t("tac_wake_running")}</span>`;
-  btn.classList.add("working");
-  haptic(10);
-  try {
-    const r = await tlPost("/api/tmux/wake", { session: sname, pane: (btn.dataset.target || "").split(":")[1] || "" });
-    if (r && r.ok) {
-      btn.innerHTML = `${icon("ok", 12)} <span>${escHtml(r.msg || t("tac_wake_done"))}</span>`;
-      btn.classList.remove("working");
-      btn.classList.add("success");
-      haptic(15);
-      // 推进成功后，延迟 1.5 秒刷新当前会话终端画面
-      setTimeout(async () => {
-        try {
-          await fetchTmuxData(true);
-          renderTmuxPage();
-        } catch (_) {}
-      }, 1500);
-    } else {
-      btn.innerHTML = `<span>✗ ${escHtml((r && r.msg) || t("tac_wake_fail"))}</span>`;
-    }
-  } catch (err) {
-    btn.innerHTML = `<span>✗ ${escHtml(err.message)}</span>`;
-  }
-  setTimeout(() => {
-    btn.disabled = false;
-    btn.classList.remove("working", "success");
-    btn.innerHTML = origHtml;
-  }, 4500);
-});
-
 // --- 定时任务「▶ 触发」按钮: POST /api/tasks/run ---
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest(".btn-task-trigger");
@@ -5192,7 +5129,7 @@ function renderConnbar() {
   if (!grid) return;
   const hosts = TL_CONF.hosts || {};
   const ts = hosts.tailscale || "", lan = hosts.lan || "";
-  const user = (hosts.ssh_user || "tetsuya");
+  const user = (hosts.ssh_user || "user");
   let h = "";
   if (BOOT.readonly) {
     const currentHost = String(location.hostname || "");
@@ -5219,7 +5156,7 @@ function syncConnbarVisibility() {
 }
 
 // --- F3 垃圾清理 ---
-const CLEAN_IDS = ["journal", "apt", "tmp_old", "hermes_cache", "omp_jsonl", "binobj"];
+const CLEAN_IDS = ["journal", "apt", "tmp_old", "binobj"];
 let cleanItems = [];
 
 async function cleanScan() {
@@ -5432,7 +5369,6 @@ function initToolsPage() {
     $("tl-health-run")?.addEventListener("click", runHealth);
     $("tl-clean-scan")?.addEventListener("click", cleanScan);
     $("tl-clean-exec")?.addEventListener("click", cleanExec);
-    $("tl-aiclean-run")?.addEventListener("click", aiCleanHome);
     $("tl-net-run")?.addEventListener("click", netRun);
     $("tl-usvc-unlock")?.addEventListener("click", usvcUnlock);
     $("tl-usvc-showlock")?.addEventListener("click", () => {
@@ -5564,10 +5500,4 @@ initLogAgentPicker();   // 延后到这里: escHtml 等 const 已初始化(避�
 initLanguageMenu();
 load(true);
 renderConnbar();   // 顶栏连接信息(ssh/IP)随首屏渲染, 不等进工具页
-// AI 清理: 首页面板按钮 + 弹层关闭(独立于工具页惰性初始化, 首页直达)
-$("hp-aiclean-run")?.addEventListener("click", aiCleanHome);
-$("aiclean-modal-close")?.addEventListener("click", aiCloseModal);
-$("aiclean-modal")?.addEventListener("click", e => { if (e.target.id === "aiclean-modal") aiCloseModal(); });
-$("aiclean-modal-rerun")?.addEventListener("click", aiRerun);
-aiStatusChip();
 hydrateFragments();
