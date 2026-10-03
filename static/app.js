@@ -123,6 +123,7 @@ const FILTERS = {
 
 function row(e, mobile) {
   const badge = {docker:[t("badge_docker"),"badge-docker"], systemd:["systemd","badge-systemd"], direct:[t("badge_direct"),"badge-direct"]}[e.type] || [t("badge_direct"),"badge-direct"];
+  const serviceName = e.display_name || ((e.name && e.name !== "?") ? e.name : t("svc_unknown_listener"));
   let text = badge[0], detail = "";
   const svPaused = e.paused || e.svcctl_paused;
   if (e.is_self) { text = t("badge_self"); badge[1] = "badge-self"; }
@@ -143,23 +144,23 @@ function row(e, mobile) {
     ? `<span class='ctl-btn' data-ctl='${man}' data-port='${e.port}' role='button' tabindex='0' aria-disabled='true'>${t("ctl_checking")}</span>`
     : "";
   const svctl = svBtn(e);
-  const svBtnNamed = svctl ? svctl.replace("data-svcp=", `data-svcn='${esc(e.name.replace(/ \(docker\)| \(paused\)$/g, ""))}' data-svcp=`) : "";
+  const svBtnNamed = svctl ? svctl.replace("data-svcp=", `data-svcn='${esc(serviceName.replace(/ \(docker\)| \(paused\)$/g, ""))}' data-svcp=`) : "";
   const res = fmtRes(e);
   const rres = e.res ? { cpu: Math.round(e.res.cpu), mem_mb: Math.round(e.res.mem_mb),
                          up_sec: Math.floor(e.res.up_sec / 60) * 60 } : null;
-  const dpayload = { name: e.name, port: e.port, ip, cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
+  const dpayload = { name: serviceName, port: e.port, ip, cmd, cwd, pids: e.pids, res: rres, unit: e.unit || null, cid: e.container_id || null };
   const detailBtn = BOOT.readonly ? "" : `<span class='svc-detail' role='button' tabindex='0' data-detail='${encodeURIComponent(JSON.stringify(dpayload))}' title='${t("svc_detail")}'>${t("svc_detail")}</span>`;
   const actions = `${detailBtn}${ctl}${svBtnNamed}`;
   if (mobile) {
-    return `<tr><td><div class='td-head'>${svcDot}<span class='svc'>${esc(e.name)}</span>` +
+    return `<tr><td><div class='td-head'>${svcDot}<span class='svc'>${esc(serviceName)}</span>` +
       `<span class='badge ${badge[1]}'>${text}</span>${detail}` +
       `<span class='svc-act' role='button' tabindex='0' data-copy='${esc(link)}' title='${t("act_copy_addr")}' aria-label='${t("act_copy_addr")}'>${icon("copy", 15)}</span>` +
-      `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(e.name)}'>${icon("ext", 15)}</a></div>` +
+      `<a class='svc-open' href='${link}' target='_blank' rel='noopener' aria-label='${t("act_open")} ${esc(serviceName)}'>${icon("ext", 15)}</a></div>` +
       `<div class='svc-summary'><a class='port' href='${link}' target='_blank' rel='noopener'>:${e.port}</a>` +
       `<span class='svc-summary-res'>${res || "—"}</span><span class='svc-summary-detail'>${actions}</span></div></td></tr>`;
   }
   return `<tr>
-    <td class='name'>${svcDot}<span class='svc'>${esc(e.name)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
+    <td class='name'>${svcDot}<span class='svc'>${esc(serviceName)}</span><span class='badge ${badge[1]}'>${text}</span>${detail}</td>
     <td class='port' data-label='${t("th_port")}'><a href='${link}' target='_blank' rel='noopener'>${e.port}</a></td>
     <td class='res' data-label='${t("th_res")}'>${res || "—"}</td>
     <td class='svc-actions' data-label='${t("g_detail")}'>${actions}</td>
