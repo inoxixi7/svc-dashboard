@@ -8,9 +8,10 @@ const AUTO = BOOT.auto;
 const LANG = BOOT.lang;
 const LOCALE_TAG = { zh: "zh-CN", en: "en-US", ja: "ja-JP" }[LANG] || undefined;
 const TS_MODE = BOOT.tsMode;
-const TS_HOST = "100.76.219.104";
-const LAN_HOST = "192.168.3.82";
-const linkHost = (h) => (TS_MODE && (h === "192.168.3.82")) ? TS_HOST : h;  // 来源为 tailscale(100.64.0.0/10) 时链接主机改用 tailscale IP
+const RUNTIME_HOSTS = ((BOOT.tl || {}).hosts || {});
+const TS_HOST = RUNTIME_HOSTS.tailscale || "";
+const LAN_HOST = RUNTIME_HOSTS.lan || "";
+const linkHost = (h) => (TS_MODE && LAN_HOST && TS_HOST && h === LAN_HOST) ? TS_HOST : h;
 const T = BOOT.t;
 const t = (k, p) => { let s = T[k] ?? k; if (p !== undefined) { for (const [a, b] of Object.entries(p)) s = s.split("{" + a + "}").join(b); } return s; };
 const DASH_LANGS = ["zh", "en", "ja"];
@@ -1432,17 +1433,33 @@ async function renderPortalTmux() {
   }
 }
 
+function serviceLink(e) {
+  if (e.is_self || e.app_id === "mikata") return location.href;
+  let host = location.hostname;
+  if (host === "127.0.0.1" || host === "localhost" || host === "::1") {
+    host = LAN_HOST || host;
+  }
+  host = linkHost(host);
+  return `http://${host}:${e.port}/`;
+}
+
 function renderPortalSvc(services) {
   const body = $("hp-body-svc"), badge = $("hp-badge-svc");
   if (!body) return;
   const svcs = services || [];
-  const web = svcs.filter(e => {
+  const candidates = svcs.filter(e => {
     const ip = e.ip || "";
     const loop = ip.startsWith("127.") || ip === "::1" || ip.startsWith("::ffff:127.");
-    return e.scope !== "system" && !e.paused && !loop && ![22000, 5355].includes(+e.port);
+    const normalWeb = e.scope !== "system" && !loop && ![22000, 5355].includes(+e.port);
+    return !e.paused && (e.app_id || normalWeb);
   });
   const seen = new Set(), uniq = [];
-  web.forEach(e => { const k = e.port + ":" + (e.name || ""); if (!seen.has(k)) { seen.add(k); uniq.push(e); } });
+  candidates
+    .sort((a, b) => (b.app_priority || 0) - (a.app_priority || 0) || a.port - b.port)
+    .forEach(e => {
+      const k = (e.app_id || e.name || "?") + ":" + e.port;
+      if (!seen.has(k)) { seen.add(k); uniq.push(e); }
+    });
   const activeCount = svcs.filter(s => !s.paused).length;
   if (badge) badge.textContent = t("hp_services_count", { n: activeCount, total: svcs.length });
   if (!uniq.length) {
@@ -1452,10 +1469,13 @@ function renderPortalSvc(services) {
   const topSvcs = uniq.slice(0, 6);
   body.innerHTML = `<div class="hp-svc-grid">` + topSvcs.map(e => {
     const id = svcIdentity(e);
-    const link = `http://${linkHost(location.hostname)}:${e.port}/`;
+    const link = serviceLink(e);
     const r = e.res;
-    const resTxt = r ? `${r.cpu.toFixed(0)}% · ${Math.round(r.mem_mb)}M` : (id.sub || "active");
-    return `<a class="hp-svc-chip" href="${escAttr(link)}" target="_blank" rel="noopener">
+    const detail = e.app_category || id.sub || "active";
+    const resTxt = r
+      ? `${detail} · ${r.cpu.toFixed(0)}% · ${Math.round(r.mem_mb)}M`
+      : detail;
+    return `<a class="hp-svc-chip" href="${escAttr(link)}" target="${e.is_self ? "_self" : "_blank"}" rel="noopener">
       <div class="hp-svc-head">
         <span class="hp-svc-name">${escHtml(id.main)}</span>
         <span class="hp-svc-port">:${e.port}</span>
@@ -1602,7 +1622,7 @@ function renderHomeTiles(services) {
   web.forEach(e => { const k = e.port + ":" + (e.name || ""); if (!seen.has(k)) { seen.add(k); uniq.push(e); } });
   if (panel) panel.hidden = !uniq.length;
   el.innerHTML = uniq.length ? uniq.map(e => {
-    const link = `http://${linkHost(location.hostname)}:${e.port}/`;
+    const link = serviceLink(e);
     const id = svcIdentity(e);
     const svp = !!e.svcctl_paused;
     const btn = (e.manageable && !e.is_self)
@@ -1627,6 +1647,10 @@ function renderHomeTiles(services) {
 // docker → 容器名; systemd 真单元 → 单元名; 否则脚本名(解释器/dashboard 这类泛化名
 // 退回 cwd 目录名, 如 python3 -m http.server + cwd=yomu → 主标签 yomu)。
 function svcIdentity(e) {
+  if (e.display_name) {
+    const tip = [e.app_category || "", e.cmdline || "", e.cwd ? `cwd: ${e.cwd}` : ""].filter(Boolean).join("\n");
+    return { main: e.display_name, sub: e.app_category || e.type || "", tip };
+  }
   const interp = new Set(["python", "python3", "python", "node", "bun", "npm", "npx",
     "uv", "dotnet", "java", "ruby", "perl", "php", "sh", "bash", "sudo", "nohup"]);
   const cmdline = (e.cmdline || "").trim();
