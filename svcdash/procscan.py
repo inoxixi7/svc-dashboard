@@ -1,4 +1,4 @@
-import glob, os, re, signal, socket, subprocess, threading, time
+import ipaddress, glob, os, re, signal, socket, subprocess, threading, time
 from svcdash.i18n import t, DEFAULT_LANG
 def read(path):
     try:
@@ -276,6 +276,24 @@ def service_profile(entry):
         return {"app_id": "samba", "display_name": "Samba / SMB",
                 "app_category": "File Sharing", "app_priority": 20,
                 "app_role": role, "app_entry": False}
+
+    # tailscaled 的节点监听端口是动态的，因此不能按端口号识别。
+    # 普通用户无法读取 root-owned tailscaled 的 /proc 时，按 Tailscale
+    # 地址段识别：IPv4 100.64.0.0/10，IPv6 fd7a:115c:a1e0::/48。
+    ip = str(entry.get("ip") or "")
+    is_tailnet_ip = False
+    try:
+        addr = ipaddress.ip_address(ip)
+        is_tailnet_ip = (
+            addr in ipaddress.ip_network("100.64.0.0/10")
+            or addr in ipaddress.ip_network("fd7a:115c:a1e0::/48")
+        )
+    except ValueError:
+        pass
+    if name == "tailscaled" or "tailscaled.service" in unit or is_tailnet_ip:
+        return {"app_id": "tailscale", "display_name": "Tailscale",
+                "app_category": "Network Infrastructure", "app_priority": 20,
+                "app_role": "node-listener", "app_entry": False}
 
     return None
 def nice_name(cmdline):
