@@ -341,7 +341,7 @@ def _render_shell_core(host_header, entries, updated_ts, lang, sysdata):
         sysbar = render_sysbar(sysdata, lang)
         table = _svc_rows(entries, lang, host_header)
         toolchips = render_toolchips(entries, host_header, lang)
-        goals_panel = render_goal_cards(scan_goals(), lang)
+        goals_panel = render_goal_cards([], lang)
         events_panel = ""
     body = (_shell_tpl()
             .replace("{{LANG}}", lang)
@@ -388,11 +388,9 @@ def render_fragment(frag, lang, host_header, ts_mode=False):
         if ent and time.time() - ent[0] < PAGE_CACHE_SEC:
             return ent[1]
         if frag == "goals":
-            html = render_goal_cards(scan_goals(), lang)
+            html = render_goal_cards([], lang)
         elif frag == "events":
-            html = render_events(merge_events(
-                parse_watchdog_events(), parse_completed_goals(),
-                parse_repo_commits()), lang)
+            html = render_events(parse_repo_commits(), lang)
         elif frag == "toolchips":
             html = render_toolchips(gather(lang), host_header, lang)
         else:
