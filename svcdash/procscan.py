@@ -220,6 +220,33 @@ def classify(cgroup_text):
 INTERPRETERS = {"python3", "python", "node", "dotnet", "java", "ruby",
                 "perl", "php", "bash", "sh", "sudo", "nohup", "npm",
                 "npx", "bun", "deno", "uvicorn", "gunicorn", "go"}
+
+# g3 服务目录：只负责“把已发现的真实服务起一个人能看懂的名字”，
+# 不创建端口、不假定固定宿主端口。Docker 服务仍以 docker ps 实际映射为准。
+def service_profile(entry):
+    raw_name = str(entry.get("name") or "")
+    name = raw_name.replace(" (docker)", "").lower()
+    unit = str(entry.get("unit") or "").lower()
+    cwd = str(entry.get("cwd") or "").rstrip("/").lower()
+
+    if entry.get("is_self") or (
+            entry.get("port") == 8180 and (unit == "svc-dashboard.service" or cwd.endswith("/svc-dashboard"))):
+        return {"app_id": "mikata", "display_name": "Mikata",
+                "app_category": "Dashboard", "app_priority": 100}
+
+    if name == "adguardhome" or "adguardhome" in unit:
+        return {"app_id": "adguard-home", "display_name": "AdGuard Home",
+                "app_category": "DNS / Network", "app_priority": 90}
+
+    if "private-splendor-web-web" in name:
+        return {"app_id": "private-splendor", "display_name": "Private Splendor",
+                "app_category": "Game", "app_priority": 80}
+
+    if "private-splendor-web-server" in name:
+        return {"app_id": "private-splendor-api", "display_name": "Splendor API",
+                "app_category": "Backend", "app_priority": 60}
+
+    return None
 def nice_name(cmdline):
     """从 cmdline 里挑一个能认出的名字,如 python3 run.py -> run.py。"""
     parts = cmdline.split()
@@ -449,6 +476,9 @@ def gather(lang=DEFAULT_LANG):
     paused_ports = {r.get("port") for r in svcctl.load_state()}
     self_port = int(os.environ.get("SVC_PORT", "80"))
     for e in entries:
+        profile = service_profile(e)
+        if profile:
+            e.update(profile)
         if e.get("pids"):
             e["res"] = service_resources(e["pids"])
         if e["port"] in paused_ports:
