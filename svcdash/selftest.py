@@ -244,6 +244,14 @@ def selftest():
             svcctl._log("resume", {"port": 1, "name": "x", "pids": [2]})
             self.assertEqual(len(svcctl.history()), 3)  # resume(65534) + 手写2条
 
+        def test_g3_service_profiles(self):
+            from svcdash.procscan import service_profile
+            self.assertEqual(service_profile({"is_self": True, "port": 8180})["app_id"], "mikata")
+            self.assertEqual(service_profile({"name": "adguardhome (docker)"})["display_name"], "AdGuard Home")
+            self.assertEqual(service_profile({"name": "private-splendor-web-web-1 (docker)"})["app_id"], "private-splendor")
+            self.assertEqual(service_profile({"name": "private-splendor-web-server-1 (docker)"})["app_id"], "private-splendor-api")
+            self.assertIsNone(service_profile({"name": "unknown"}))
+
         def test_runtimes(self):
             import time
             from svcdash import runtimes as rt
