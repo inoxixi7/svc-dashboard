@@ -12,7 +12,7 @@
   静态前端 `static/{index.html, app.css, app.js}`。前端 JS/CSS 是**真文件**（不再内嵌
   Python 字符串），浏览器可缓存；运行时值经内联 `window.__BOOT__` 注入。
 - **纯 Python 标准库**，零第三方依赖——`python3 dashboard.py` 直接跑。
-- 已部署为 **root 级 systemd 服务**（监听 80 特权端口）。
+- 已部署为 **用户级 systemd 服务**（`systemctl --user`，以 bber 身份运行，只监听 `127.0.0.1:8180`，重启不需要 sudo）。
 
 ```
 dashboard.py          薄入口（参数解析 + 启动）
@@ -59,7 +59,7 @@ static/               前端：index.html(壳+占位) app.css app.js
 | `/api/tmux` | GET | tmux 窗格列表 |
 | `/api/trajectory?repo=NAME` | GET | 单仓库轨迹（14 天双行色块 + 500 条事件流；`repos.py:_traj_data`，OMP 会话全信号：工具/失败/压缩/指令/声明/退出/子代理/重规划/模型） |
 | `/api/manage?unit=` | GET | 受管单元状态 |
-| `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（免密 sudo） |
+| `POST /api/manage` | POST | `{"unit":id,"action":"start\|stop\|restart\|pause\|resume"}`（走 `sudo -n systemctl`；当前用户级运行且 sudo 需密码，此操作会失败） |
 | `GET /api/svcctl` | GET | 通用暂停台账 + 历史（`~/.omp/svc-dashboard/{paused.json,actions.log}`） |
 | `POST /api/svcctl` | POST | `{"port":N,"action":"pause"\|"resume"}`——任意监听服务冻结/解冻（docker→`docker pause`；其余→SIGSTOP/SIGCONT）；守卫拒绝自身/22/受保护进程；`/api` 条目新增 `res{cpu,mem_mb,up_sec}`/`manageable`/`svcctl_paused` |
 | `/api/health` | GET | 健康快检（系统/磁盘趋势/温度/进程/端口/看门狗） |
@@ -93,32 +93,36 @@ static/               前端：index.html(壳+占位) app.css app.js
    圆角。修法是给栅格/flex 子项（`.hp-portal-card`）加 `min-width:0`，让轨道回到
    容器宽、内部 ellipsis 正常截断。凡"某卡右侧被裁/圆角消失"先怀疑此坑。
 
-## 五、部署与重启（root 级 systemd + cgroup 限制）
+## 五、部署与重启（用户级 systemd + cgroup 限制，2026-10-14 核对）
 
 ```bash
-# unit 文件: /etc/systemd/system/svc-dashboard.service（仓库内模板 svc-dashboard.service 同内容）
+# unit 文件: ~/.config/systemd/user/svc-dashboard.service（仓库内模板 svc-dashboard.service 同内容）
+#   + drop-in ~/.config/systemd/user/svc-dashboard.service.d/kuma.conf（EnvironmentFile=~/.config/svc-dashboard/kuma.env）
 # 限制: MemoryMax=512M(额度刷新 spawn node, 128M 会 OOM) / CPUQuota=40% / TasksMax=64（实测空闲 ~17MB、0% CPU）
 
-sudo systemctl restart svc-dashboard      # 重启
-systemctl status svc-dashboard            # 看状态
-journalctl -u svc-dashboard -f            # 看日志
-curl -s http://127.0.0.1/api/sys | head -c 200   # 验证
-python3 dashboard.py --selftest          # 离线自检（单测 + 真实数据源 dry-run）
+systemctl --user restart svc-dashboard     # 重启（不需要 sudo）
+systemctl --user status svc-dashboard      # 看状态
+journalctl --user -u svc-dashboard -f      # 看日志
+curl -s http://127.0.0.1:8180/api/sys | head -c 200   # 验证
+python3 dashboard.py --selftest            # 离线自检（单测 + 真实数据源 dry-run）
 ```
 
-命令行参数：`--port N`（默认 80）`--host IP`（默认 0.0.0.0，tailscale 手机可达必须
-0.0.0.0）`--scan`（一次性扫描打印 JSON）`--selftest`（自检）。
+命令行参数：`--port N`（默认 8180，`config.DEFAULT_PORT`）`--host IP`（默认 127.0.0.1，
+`config.LISTEN_HOST`；只监听本机，手机要访问需另行用 Tailscale Serve 或改监听地址）
+`--scan`（一次性扫描打印 JSON）`--selftest`（自检）。
 
 HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）。
 
 ## 六、tailscale 源切换机制
 
-用户手机经 Tailscale（CGNAT 段 `100.64.0.0/10`，本机 TS IP=100.76.219.104）访问时，
-页面里的服务链接主机要自动从 `192.168.3.82` 切到 TS IP：
+用户手机经 Tailscale（CGNAT 段 `100.64.0.0/10`）访问时，页面里的服务链接主机要自动
+从局域网 IP 切到本机 Tailscale IP。两个 IP 都不写死：`svcdash/tools.py` 在运行时探测
+（`hosts.lan` / `hosts.tailscale`），经 `BOOT.tl.hosts` 注入前端：
 
 - 服务端（svcdash/handler.py `_is_tailscale_client`）：`_client_ip()` 落在
   `100.64.0.0/10` 网段 → BOOT 里 `tsMode=true`。
-- 前端（static/app.js）：`const TS_HOST = "100.76.219.104"; linkHost = (h) => (TS_MODE && h === "192.168.3.82") ? TS_HOST : h`。
+- 前端（static/app.js）：`TS_HOST = RUNTIME_HOSTS.tailscale`、`LAN_HOST = RUNTIME_HOSTS.lan`；
+  `linkHost = (h) => (TS_MODE && LAN_HOST && TS_HOST && h === LAN_HOST) ? TS_HOST : h`。
 - 新增带链接的前端功能时**必须走 `linkHost()`**，否则手机端点不通。
 
 ## 七、goal_watchdog 集成
@@ -159,7 +163,7 @@ HTTP 层：HTTP/1.1 keep-alive + gzip + 静态 ETag/304（svcdash/handler.py）�
 - 活动页事件分两类处理：`kind=commit` 的 Git 提交事件属于公开仓库信号，保留提交说明、文件路径、作者和 Diff 入口；Goal/watchdog 的 `complete`、`cleanup`、`recover`、`nudge` 等事件只保留 Goal ID、事件类型和时间，正文统一显示 `[内容已脱敏]`。
 - 因此活动页出现“部分正常、部分 `[内容已脱敏]`”是预期行为，不是导出失败：前者是公开 Git 活动，后者是 Agent/Goal 内部日志。
 - 自动发布器产生的 `svc-dashboard` / `Update sanitized static snapshot ...` 维护提交只保留最新一条作为运行状态，其余历史在首页和活动页折叠；活动页可展开全部自动发布历史。匹配仅针对提交说明以 `Update sanitized static snapshot` 开头的自动构建提交，其他 `svc-dashboard` Git 提交照常显示。
-- 只读静态快照顶部的“在线版”入口用于切回实时 dashboard：从内网地址打开时回到当前内网主机，从 Tailscale 地址打开时回到当前 Tailscale 主机，从公网 GitHub Pages 打开时默认回到本机 Tailscale 地址 `100.76.219.104`。该入口只在静态只读版显示。
+- 只读静态快照顶部的“在线版”入口用于切回实时 dashboard：从内网地址打开时回到当前内网主机，从 Tailscale 地址打开时回到当前 Tailscale 主机，从公网 GitHub Pages 打开时回到运行时探测到的本机 Tailscale 地址（`TS_HOST`）。该入口只在静态只读版显示。
 - 静态快照的负载/CPU 图不依赖访客浏览器的 `localStorage`：发布器把每次快照的系统采样保存到 `~/.cache/svc-dashboard-static/chart.json`，导出最多 24 个点并注入 `BOOT.chartData`；首次发布用当前采样填满窗口，后续定时发布逐步形成真实趋势。在线版仍使用浏览器实时采样。
 - 界面语言支持中文、英文、日文：在线版默认遵从浏览器 `Accept-Language`，也可用 `?lang=zh|en|ja` 指定；顶部语言菜单可以选择“自动”或固定语言，选择保存在浏览器 `localStorage` 的 `svc-lang`。静态版同时发布 `index.html`、`index-en.html`、`index-ja.html`，首次打开按浏览器语言自动跳到对应版本；菜单选择在三个静态文件之间切换，并保留当前页面锚点。切回“自动”会重新使用系统/浏览器语言。
 - GitHub Pages 的传统分支发布有每小时 10 次构建软上限，因此不要改成每 5 分钟；10 分钟最多 6 次/小时。
