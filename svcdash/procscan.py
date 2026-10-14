@@ -257,6 +257,11 @@ def service_profile(entry):
                 "app_category": "Monitoring", "app_priority": 85,
                 "app_role": "web", "app_entry": True}
 
+    if name == "jlpt-study":
+        return {"app_id": "jlpt-study", "display_name": "JLPT 刷题",
+                "app_category": "Study", "app_priority": 75,
+                "app_role": "web", "app_entry": True}
+
     if name == "openlist" or "openlist" in unit:
         port = int(entry.get("port") or 0)
         return {"app_id": "openlist", "display_name": "OpenList",
